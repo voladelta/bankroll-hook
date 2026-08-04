@@ -2,7 +2,7 @@
 
 Evidence date: 4 August 2026
 
-Evidence state: local working tree, not a clean 40-character public commit
+Evidence state: public GitHub source; the generated application package binds the exact clean commit
 
 ## Compatibility
 
