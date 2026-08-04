@@ -81,7 +81,7 @@ function App() {
         <div className="header-actions">
           <span className="network-label">
             <span className="network-dot" />
-            {connection.chain?.name ?? "Ethereum"}
+            {transactionsConfigured ? connection.chain?.name ?? "Ethereum" : "Demo mode"}
           </span>
           <div
             className="wallet-control"
@@ -199,7 +199,7 @@ function SeasonStatus() {
   return (
     <aside className="season-status" aria-label="Current season status">
       <div className="season-heading">
-        <span>Live bankroll</span>
+        <span>{transactionsConfigured ? "Live bankroll" : "Simulated bankroll"}</span>
         <span>{season.blocksRemaining} blocks left</span>
       </div>
       <strong>{season.bankroll.toFixed(2)} <small>WETH</small></strong>
