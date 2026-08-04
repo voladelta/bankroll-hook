@@ -1,0 +1,1434 @@
+{
+  "$schema": "urn:programmable:v4-hook-submission:1.3.0",
+  "schemaVersion": 1,
+  "standardVersion": "1.3.0",
+  "stage": "proposal",
+  "model": {
+    "id": "bankroll-hook",
+    "name": "Bankroll Hook",
+    "summary": "A finite Uniswap v4 launch game where a trader may attach one fixed-odds WETH wager to a successful exact-input swap while a separate WETH bankroll reserves the maximum loss.",
+    "userOutcome": "Traders keep ordinary four-mode swaps and may use one explicit router for a wagered exact-input swap; bankroll providers fund bounded exposure and redeem the remaining bankroll after finalisation.",
+    "category": "gaming",
+    "whyV4": "One canonical hook can authenticate successful pool execution, charge executed gross native quote volume and create a ticket from the same atomic swap result."
+  },
+  "builder": {
+    "github": "voladelta",
+    "contact": "https://github.com/voladelta",
+    "beneficiary": null,
+    "licenseDeclaration": "MIT for first-party source, tests and documents; pinned dependencies retain their own licences."
+  },
+  "publicMetadata": {
+    "project": {
+      "name": "Bankroll Hook",
+      "description": "Optional fixed-odds WETH wagers backed by a separately funded bankroll on one canonical Uniswap v4 launch pool.",
+      "projectUri": "https://github.com/voladelta/bankroll-hook",
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": false,
+      "metadataOwner": null
+    },
+    "token": {
+      "name": "Bankroll Launch Token",
+      "symbol": "BANK",
+      "metadataUri": null,
+      "metadataContentHash": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": false,
+      "metadataOwner": null
+    },
+    "claimedAffiliations": [
+      {
+        "organization": "Uniswap v4",
+        "relationship": "technology-use",
+        "evidenceUri": null
+      },
+      {
+        "organization": "Chainlink VRF",
+        "relationship": "technology-use",
+        "evidenceUri": null
+      }
+    ],
+    "providerPresentations": []
+  },
+  "target": {
+    "chainId": 1,
+    "network": "ethereum",
+    "solidityVersion": "0.8.26",
+    "evmVersion": "cancun",
+    "dependencyBaseline": "model-specific-pinned",
+    "officialLaunchProfileId": null
+  },
+  "assets": [
+    {
+      "id": "eth",
+      "role": "quote",
+      "origin": "native-eth",
+      "address": null,
+      "decimals": 18,
+      "decimalsSource": "native-eth-protocol",
+      "supplyPolicy": "native",
+      "initialSupply": null,
+      "behaviors": [
+        "standard"
+      ],
+      "controls": []
+    },
+    {
+      "id": "launched-token",
+      "role": "launched",
+      "origin": "new-fixed-supply",
+      "address": null,
+      "decimals": 18,
+      "decimalsSource": "implementation-constant",
+      "supplyPolicy": "fixed-at-creation",
+      "initialSupply": "1000000000000000000000000000",
+      "behaviors": [
+        "standard"
+      ],
+      "controls": []
+    }
+  ],
+  "launchLifecycle": {
+    "tokenCreation": {
+      "applicable": true,
+      "actor": "BankrollLaunchV1 creates one fixed one-billion-token UERC20 through its immutable factory.",
+      "valueFlow": "The launcher sends the supply into one-sided liquidity and sends deliberate dust to the permanent locker.",
+      "custody": "The launcher and hook hold no initial token supply after launch.",
+      "failure": "A factory failure, unexpected token address or transfer failure reverts the complete launch.",
+      "event": "BankrollTokenLaunched.",
+      "notApplicableReason": null
+    },
+    "poolInitialization": {
+      "applicable": true,
+      "actor": "The immutable registrar initializes one factory-deployed and router-bound hook.",
+      "valueFlow": "No game value moves; the hook records the canonical PoolId and opens Funding.",
+      "custody": "No custody changes at initialization.",
+      "failure": "Wrong registrar, PoolKey, permission mask or missing router binding reverts.",
+      "event": "HookDeployed and FundingOpened.",
+      "notApplicableReason": null
+    },
+    "liquidityFormation": {
+      "applicable": true,
+      "actor": "BankrollLaunchV1 creates one one-sided v4 position through its immutable PositionManager.",
+      "valueFlow": "The launched supply enters one locked position.",
+      "custody": "A dedicated immutable locker owns the position NFT and token dust. It has no transfer, decrease, rescue or admin path.",
+      "failure": "Any initialization, mint, settlement or custody failure reverts the complete launch.",
+      "event": "BankrollLiquidityConfigured.",
+      "notApplicableReason": null
+    },
+    "initialTransaction": {
+      "applicable": true,
+      "actor": "The creator may execute one declared ETH buy through BankrollLaunchV1 with empty hook data.",
+      "valueFlow": "The ordinary swap pays the 10 bps fee and creates no ticket.",
+      "custody": "PoolManager settles the swap; the hook retains only the fee claim.",
+      "failure": "Any swap failure must revert the complete launch.",
+      "event": "BankrollInitialBuy and ProgrammableFeeAccrued.",
+      "notApplicableReason": null
+    },
+    "trading": {
+      "applicable": true,
+      "actor": "Traders use ordinary routers for ordinary swaps or the immutable narrow router for an exact-input wager.",
+      "valueFlow": "PoolManager settles the swap; a wager also moves WETH into an open stake liability.",
+      "custody": "The hook holds bankroll and stake WETH plus native fee claims.",
+      "failure": "Slippage, malformed data, capacity or solvency failure reverts atomically.",
+      "event": "ProgrammableFeeAccrued, WagerStaged and TicketCreated.",
+      "notApplicableReason": null
+    },
+    "feesAndClaims": {
+      "applicable": true,
+      "actor": "Callbacks accrue fees and only the immutable Programmable owner may claim.",
+      "valueFlow": "Ten bps of executed gross native quote moves into an owner liability and later to its selected destination.",
+      "custody": "The hook holds equal native PoolManager claims.",
+      "failure": "Unauthorized, empty, zero-recipient or failed claims revert.",
+      "event": "ProgrammableFeeAccrued and ProgrammableFeesClaimed.",
+      "notApplicableReason": null
+    },
+    "dependencyFailure": {
+      "applicable": true,
+      "actor": "Any caller may use the published timeout paths when randomness is not final.",
+      "valueFlow": "Unfulfilled randomness turns each open stake into a refund liability.",
+      "custody": "Existing WETH liabilities remain in the hook.",
+      "failure": "PoolManager failures revert; the official launcher runtime profile remains blocked.",
+      "event": "RandomnessExpired.",
+      "notApplicableReason": null
+    },
+    "retirement": {
+      "applicable": true,
+      "actor": "Anyone may finalise after settlement or expiry.",
+      "valueFlow": "Players claim first-class liabilities and bankroll providers redeem remaining assets pro rata.",
+      "custody": "The hook has no administrator or migration path.",
+      "failure": "A new model requires a new PoolKey.",
+      "event": "GameFinalized, TicketClaimed and BankrollRedeemed.",
+      "notApplicableReason": null
+    }
+  },
+  "pool": {
+    "currency0": "eth",
+    "currency1": "launched-token",
+    "orderingRule": "Native ETH is currency0 and the launched token is currency1.",
+    "tickSpacing": 200,
+    "lpFee": {
+      "classification": "lp-fee",
+      "mode": "static",
+      "hundredthsOfBip": 0,
+      "initialHundredthsOfBip": null,
+      "initializationPath": null,
+      "applicationMode": null,
+      "overrideFlagPolicy": null,
+      "persistentUpdateActor": null,
+      "persistentUpdateCallSites": [],
+      "rateLimit": null,
+      "updatePath": null,
+      "minimum": null,
+      "maximum": null,
+      "inputMetric": null,
+      "referenceAsset": null,
+      "measurementUnit": null,
+      "observationMode": null,
+      "observationWindow": null,
+      "curve": null,
+      "updateCadence": null,
+      "liquidityDecreaseBehavior": null,
+      "manipulationResistance": null,
+      "failureRule": null,
+      "recipient": "pool-liquidity-providers"
+    },
+    "canonical": true,
+    "alternativePools": "Alternative pools may exist and do not inherit this model's behavior."
+  },
+  "programmableFee": {
+    "policyId": "programmable-volume-fee-v1",
+    "policyVersion": "1.0.0",
+    "poolScope": "canonical-launch-pool-key",
+    "rates": {
+      "unit": "hundredths-of-bip",
+      "selectedHundredthsOfBip": 0,
+      "minimumEffectiveHundredthsOfBip": 1000,
+      "effectiveHundredthsOfBip": 1000,
+      "platformHundredthsOfBip": 1000,
+      "projectHundredthsOfBip": 0,
+      "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+      "lpFeeExcluded": true
+    },
+    "basis": {
+      "volume": "gross-quote-side-swap-volume",
+      "quoteAsset": "canonical-pool-quote-asset"
+    },
+    "ownership": {
+      "owner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "immutable": true,
+      "claimAuthority": "owner-only",
+      "claimAvailability": "anytime",
+      "claimDestinationPolicy": "owner-or-owner-selected-per-claim",
+      "storedMutableRecipient": false,
+      "builderCanMutate": false,
+      "projectCanMutate": false,
+      "administratorCanMutate": false
+    },
+    "collection": {
+      "status": "implemented",
+      "integration": "canonical-pool-hook",
+      "enforcement": "non-bypassable",
+      "hookFeeMechanismBinding": "hook.feeMechanism",
+      "supportedSwapModes": [
+        "zeroForOne-exactInput",
+        "zeroForOne-exactOutput",
+        "oneForZero-exactInput",
+        "oneForZero-exactOutput"
+      ],
+      "swapModePaths": {
+        "zeroForOneExactInput": "before-swap-return-delta",
+        "zeroForOneExactOutput": "after-swap-return-delta",
+        "oneForZeroExactInput": "after-swap-return-delta",
+        "oneForZeroExactOutput": "before-swap-return-delta"
+      },
+      "selfCallPolicy": "same-pool-swap-forbidden"
+    },
+    "accounting": {
+      "accrualMode": "claimable-liability",
+      "liabilityKeyDimensions": [
+        "poolId",
+        "currency",
+        "owner"
+      ],
+      "crossPoolNetting": false,
+      "valueFlowId": "programmable-volume-fee",
+      "collectionEvent": "ProgrammableFeeAccrued",
+      "claimEvent": "ProgrammableFeesClaimed"
+    },
+    "evidence": {
+      "sourcePaths": [
+        "src/bankroll/BankrollHook.sol",
+        "src/bankroll/libraries/ProgrammableFeeMath.sol"
+      ],
+      "testPaths": [
+        "test/bankroll/BankrollLifecycle.t.sol",
+        "test/bankroll/unit/ProgrammableFeeMath.t.sol"
+      ]
+    }
+  },
+  "hook": {
+    "used": true,
+    "base": "OpenZeppelin BaseHook with project-specific fee, bankroll and ticket accounting",
+    "upgradeable": false,
+    "sharedAcrossPools": false,
+    "poolNamespace": "One deployment accepts one native ETH and launched-token PoolId.",
+    "poolAdmission": {
+      "enforcement": "Only the immutable registrar may initialize the exact PoolKey after router binding.",
+      "factoryOrRegistry": "BankrollHookFactory validates CREATE2 flags and deployed immutable bindings.",
+      "alternativePoolBehavior": "Alternative pools do not inherit the fee or game and are rejected by this hook.",
+      "rejectionRule": "Reject a wrong PoolManager caller, hook address, currency order, token, fee, tick spacing or PoolId."
+    },
+    "permissions": {
+      "beforeInitialize": true,
+      "afterInitialize": true,
+      "beforeAddLiquidity": false,
+      "afterAddLiquidity": false,
+      "beforeRemoveLiquidity": false,
+      "afterRemoveLiquidity": false,
+      "beforeSwap": true,
+      "afterSwap": true,
+      "beforeDonate": false,
+      "afterDonate": false,
+      "beforeSwapReturnDelta": true,
+      "afterSwapReturnDelta": true,
+      "afterAddLiquidityReturnDelta": false,
+      "afterRemoveLiquidityReturnDelta": false
+    },
+    "callbackPolicies": [
+      {
+        "callback": "beforeInitialize",
+        "necessity": "Authenticate registrar, PoolKey and router binding.",
+        "allowedReverts": "Wrong sender, shape or repeated initialization.",
+        "userExitImpact": "Runs before any game or LP exit.",
+        "noSelfCallImpact": "The callback starts no nested action."
+      },
+      {
+        "callback": "afterInitialize",
+        "necessity": "Record PoolId and open Funding.",
+        "allowedReverts": "Wrong sender, PoolId or repeated transition.",
+        "userExitImpact": "Runs once before Funding.",
+        "noSelfCallImpact": "The callback starts no nested action."
+      },
+      {
+        "callback": "beforeSwap",
+        "necessity": "Validate wager data and collect specified-quote fees.",
+        "allowedReverts": "Wrong pool, malformed wager, exact-output wager or arithmetic failure.",
+        "userExitImpact": "Does not govern liquidity removal or WETH claims.",
+        "noSelfCallImpact": "The hook exposes no swap function."
+      },
+      {
+        "callback": "afterSwap",
+        "necessity": "Collect unspecified-quote fees and create a ticket from executed volume.",
+        "allowedReverts": "Partial game fill, volume cap or settlement failure.",
+        "userExitImpact": "Does not govern liquidity removal or WETH claims.",
+        "noSelfCallImpact": "The hook exposes no swap function."
+      }
+    ],
+    "hookData": {
+      "used": true,
+      "schema": "abi.encode(uint8 version=1, bytes32 pendingId), exact length 64",
+      "identitySource": "trusted-router-decoded-user",
+      "trustedRouterDeploymentRecordId": null,
+      "callbackSenderRule": "pool-manager-callback-and-exact-router-binding",
+      "validation": "Check sender, exact-input mode, version, length, pending id, same block, Active state and deadline."
+    },
+    "feeMechanism": {
+      "used": true,
+      "classification": "hook-owned-fee",
+      "chargedCurrency": "Native ETH currency0 in all four quadrants.",
+      "swapQuadrants": {
+        "zeroForOneExactInput": {
+          "currency": "currency0",
+          "basis": "gross-input",
+          "formula": "beforeSwap removes floor(gross*1000/1000000) from AMM input",
+          "rounding": "down",
+          "maximumHundredthsOfBip": 1000
+        },
+        "zeroForOneExactOutput": {
+          "currency": "currency0",
+          "basis": "gross-input",
+          "formula": "afterSwap charges the executed native input",
+          "rounding": "down",
+          "maximumHundredthsOfBip": 1000
+        },
+        "oneForZeroExactInput": {
+          "currency": "currency0",
+          "basis": "gross-output",
+          "formula": "afterSwap deducts the fee from executed native output",
+          "rounding": "down",
+          "maximumHundredthsOfBip": 1000
+        },
+        "oneForZeroExactOutput": {
+          "currency": "currency0",
+          "basis": "gross-output",
+          "formula": "beforeSwap gross-ups so gross minus fee equals requested net output",
+          "rounding": "down",
+          "maximumHundredthsOfBip": 1000
+        }
+      },
+      "maximumHundredthsOfBip": 1000,
+      "collectionPath": "quadrant-dependent-swap-return-delta",
+      "collectionValueFlowId": "programmable-volume-fee",
+      "liabilityKeyDimensions": [
+        "poolId",
+        "currency",
+        "beneficiary"
+      ],
+      "collectionEvent": "ProgrammableFeeAccrued",
+      "recipients": [
+        {
+          "role": "programmable-platform",
+          "sharePpm": 1000000,
+          "addressSource": "fixed-address",
+          "address": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          "binding": "exact-address",
+          "derivationRule": null,
+          "mutable": false,
+          "mutationController": "none",
+          "newAddressValidation": "none",
+          "mutationEvent": null
+        }
+      ],
+      "ownership": "The immutable Programmable owner receives the complete fee; project share is zero.",
+      "claimPolicy": "Only the immutable owner may claim anytime to a nonzero destination selected for that claim."
+    },
+    "customAccounting": {
+      "used": true,
+      "backingSource": "WETH balance backs game liabilities; native PoolManager claims back the fee liability.",
+      "conservationEquation": "WETH balance >= bankrollAssets + openStakeLiability + playerClaimLiability; native claim balance backs the fee liability.",
+      "settlement": "Every PoolManager unlock settles its final deltas; WETH state changes and transfers are atomic.",
+      "partialFillBehavior": "Ordinary unspecified-quote paths use executed deltas; specified-quote and game paths reject unsupported partial fills.",
+      "liabilityNamespace": "Canonical PoolId plus asset and beneficiary where applicable.",
+      "liabilityKeyDimensions": [
+        "poolId",
+        "currency",
+        "beneficiary"
+      ],
+      "crossPoolNetting": false,
+      "duplicateCurrencyPolicy": "One hook accepts one PoolId.",
+      "failureIsolation": "Any accounting mismatch reverts the complete action.",
+      "withdrawalOrdering": "Update liability before external transfer, guarded by transient reentrancy protection."
+    },
+    "returnDeltaAccounting": {
+      "used": true,
+      "quadrants": {
+        "zeroForOneExactInput": {
+          "supported": true,
+          "specifiedCurrency": "currency0",
+          "unspecifiedCurrency": "currency1",
+          "amountSign": "negative-exact-input",
+          "specifiedComponent": {
+            "mode": "positive-only",
+            "formula": "floor(executed gross native quote * 1000 / 1000000)",
+            "minimum": "zero when the rounded fee is zero",
+            "maximum": "strictly less than the executed gross native quote",
+            "minimumSign": "zero",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "specified",
+                "assetKind": "native",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "authenticated PoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "Mint exactly the fee as native ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "Down per swap.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "afterSwap checks the expected specified native amount and reverts a mismatch.",
+          "slippageInvariant": "The external router checks the final caller delta after the hook return delta.",
+          "failureRule": "Any sign, bound, cast, partial-fill or claim-mint mismatch reverts atomically."
+        },
+        "zeroForOneExactOutput": {
+          "supported": true,
+          "specifiedCurrency": "currency1",
+          "unspecifiedCurrency": "currency0",
+          "amountSign": "positive-exact-output",
+          "specifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "Down per swap.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "afterSwap uses the actual executed native BalanceDelta.",
+          "slippageInvariant": "The external router checks the final caller delta after the hook return delta.",
+          "failureRule": "Any sign, bound, cast, partial-fill or claim-mint mismatch reverts atomically."
+        },
+        "oneForZeroExactInput": {
+          "supported": true,
+          "specifiedCurrency": "currency1",
+          "unspecifiedCurrency": "currency0",
+          "amountSign": "negative-exact-input",
+          "specifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "Down per swap.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "afterSwap uses the actual executed native BalanceDelta.",
+          "slippageInvariant": "The external router checks the final caller delta after the hook return delta.",
+          "failureRule": "Any sign, bound, cast, partial-fill or claim-mint mismatch reverts atomically."
+        },
+        "oneForZeroExactOutput": {
+          "supported": true,
+          "specifiedCurrency": "currency0",
+          "unspecifiedCurrency": "currency1",
+          "amountSign": "positive-exact-output",
+          "specifiedComponent": {
+            "mode": "positive-only",
+            "formula": "floor(executed gross native quote * 1000 / 1000000)",
+            "minimum": "zero when the rounded fee is zero",
+            "maximum": "strictly less than the executed gross native quote",
+            "minimumSign": "zero",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "specified",
+                "assetKind": "native",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "authenticated PoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "Mint exactly the fee as native ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "Down per swap.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "afterSwap checks the expected specified native amount and reverts a mismatch.",
+          "slippageInvariant": "The external router checks the final caller delta after the hook return delta.",
+          "failureRule": "Any sign, bound, cast, partial-fill or claim-mint mismatch reverts atomically."
+        }
+      },
+      "executionEvent": "ProgrammableFeeAccrued"
+    },
+    "postReturnDeltaAccounting": {
+      "afterSwap": {
+        "used": true,
+        "returnedDeltaShape": "unspecified-currency-int128",
+        "positiveMeaning": "hook-credit-caller-debit",
+        "negativeMeaning": "hook-debt-caller-credit",
+        "backingSource": "Equal native ERC-6909 claims minted before return.",
+        "callerDeltaEquation": "protocol-delta-minus-hook-delta",
+        "componentPolicies": {
+          "unspecified": {
+            "mode": "positive-only",
+            "formula": "floor(executed gross native quote * 1000 / 1000000)",
+            "minimum": "zero when the rounded fee is zero",
+            "maximum": "strictly less than the executed gross native quote",
+            "minimumSign": "zero",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "unspecified",
+                "assetKind": "native",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "authenticated PoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "Mint exactly the fee as native ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": []
+          },
+          "currency0": null,
+          "currency1": null
+        },
+        "bounds": "Zero or floor(executed gross native quote * 1000 / 1000000), checked to int128.",
+        "rounding": "Down per swap.",
+        "slippageOrMinimums": "The router checks the final caller delta.",
+        "failureRule": "Cast, claim mint or ledger failure reverts the swap.",
+        "executionEvent": "ProgrammableFeeAccrued"
+      },
+      "afterAddLiquidity": {
+        "used": false,
+        "returnedDeltaShape": null,
+        "positiveMeaning": null,
+        "negativeMeaning": null,
+        "backingSource": null,
+        "callerDeltaEquation": null,
+        "componentPolicies": {
+          "unspecified": null,
+          "currency0": null,
+          "currency1": null
+        },
+        "bounds": null,
+        "rounding": null,
+        "slippageOrMinimums": null,
+        "failureRule": null,
+        "executionEvent": null
+      },
+      "afterRemoveLiquidity": {
+        "used": false,
+        "returnedDeltaShape": null,
+        "positiveMeaning": null,
+        "negativeMeaning": null,
+        "backingSource": null,
+        "callerDeltaEquation": null,
+        "componentPolicies": {
+          "unspecified": null,
+          "currency0": null,
+          "currency1": null
+        },
+        "bounds": null,
+        "rounding": null,
+        "slippageOrMinimums": null,
+        "failureRule": null,
+        "executionEvent": null
+      }
+    },
+    "erc6909Claims": {
+      "used": true,
+      "currencyIdDerivation": "currency-address-uint160",
+      "claimBalanceScope": "claim-owner-and-currency",
+      "poolIdIncludedInClaimId": false,
+      "owner": "The hook owns claims backing the immutable owner liability.",
+      "operatorPolicy": "No external operator.",
+      "mintFlow": "take(..., claims=true) during fee collection",
+      "burnFlow": "settle(..., burn=true) during claim",
+      "takeSettleFlow": "Mint in the swap unlock; burn then take native ETH in a claim unlock.",
+      "liabilityKeys": "canonical PoolId, native currency and owner",
+      "liabilityKeyDimensions": [
+        "poolId",
+        "currency",
+        "beneficiary"
+      ],
+      "crossPoolNetting": false,
+      "transferPolicy": "No claim transfer function is exposed.",
+      "redemption": "Immutable owner only, to its selected destination.",
+      "roundingDust": "Per-swap floor remains with the trader or pool path and creates no liability.",
+      "aggregateSolvencyEquation": "native claim balance >= programmable liability"
+    },
+    "nestedActions": {
+      "used": false,
+      "directPoolManagerCalls": false,
+      "routerCalls": false,
+      "allowedActions": [],
+      "samePoolPolicy": "The hook exposes no swap function.",
+      "crossPoolPolicy": "No other pool is accepted.",
+      "callbackSuppression": "Fee claim unlock performs settle and take only.",
+      "directCallbackBehavior": "self-call-hook-callbacks-skipped",
+      "routerCallbackBehavior": "hook-callbacks-can-reenter",
+      "maximumDepth": 1,
+      "stateCommitOrder": "Validate, account, settle, then emit; any later revert rolls back all writes.",
+      "transientDeltaOwner": "The hook for claims and the router for game swaps.",
+      "syncInterleaving": "Claims use ERC-6909 mint and burn without ERC-20 sync.",
+      "slippageAggregation": "The router checks final output after hook deltas.",
+      "failureAtomicity": "Any failure reverts the complete transaction."
+    }
+  },
+  "noHookArchitecture": null,
+  "valueFlows": [
+    {
+      "id": "core-swap",
+      "action": "execute the canonical v4 swap",
+      "asset": "native ETH and launched token",
+      "from": "trader and pool",
+      "to": "pool and trader",
+      "amountRule": "Final PoolManager delta after the fixed zero LP fee and hook fee.",
+      "settlement": "The calling router settles all deltas before unlock completion.",
+      "failure": "Any callback, slippage or settlement failure reverts."
+    },
+    {
+      "id": "programmable-volume-fee",
+      "action": "accrue the mandatory charge",
+      "asset": "native ETH",
+      "from": "executed gross quote volume",
+      "to": "immutable owner liability",
+      "amountRule": "floor(gross quote * 1000 / 1000000), project share zero.",
+      "settlement": "Return delta plus equal native ERC-6909 claims.",
+      "failure": "Any mismatch reverts the swap."
+    },
+    {
+      "id": "wager",
+      "action": "stage and create one ticket",
+      "asset": "WETH",
+      "from": "player",
+      "to": "open stake liability",
+      "amountRule": "Immutable stake within volume and bankroll caps.",
+      "settlement": "Router transfer before unlock and ticket creation after successful swap.",
+      "failure": "Any failure reverts stake, swap and pending state."
+    },
+    {
+      "id": "bankroll",
+      "action": "fund and redeem the game bankroll",
+      "asset": "WETH",
+      "from": "bankroll provider",
+      "to": "hook then provider",
+      "amountRule": "One share per WETH in Funding and pro-rata remaining assets at exit.",
+      "settlement": "SafeERC20 transfer with internal share ledger.",
+      "failure": "Invalid state, amount or solvency reverts."
+    },
+    {
+      "id": "ticket-claim",
+      "action": "pay a win or timeout refund",
+      "asset": "WETH",
+      "from": "player liability",
+      "to": "ticket player",
+      "amountRule": "1.96x stake for a win or stake for timeout.",
+      "settlement": "Mark claimed, reduce liability and transfer atomically.",
+      "failure": "Wrong player or state and repeated claim revert."
+    }
+  ],
+  "authorities": [
+    {
+      "role": "Programmable fee owner",
+      "controller": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "capabilities": [
+        "claim its accrued fee to a selected destination"
+      ],
+      "mutable": false,
+      "delay": "no-delay-immutable",
+      "userExitImpact": "Cannot touch bankroll, tickets, swaps or LP positions."
+    },
+    {
+      "role": "Immutable registrar",
+      "controller": "BankrollLaunchV1 address supplied at construction",
+      "capabilities": [
+        "initialize the one canonical pool"
+      ],
+      "mutable": false,
+      "delay": "no-delay-one-time",
+      "userExitImpact": "Acts once before Funding and has no later control."
+    },
+    {
+      "role": "No mutable model administrator",
+      "controller": "none",
+      "capabilities": [
+        "No party can pause, replace contract code, rescue, change game economics or replace immutable dependencies."
+      ],
+      "mutable": false,
+      "delay": "not-applicable",
+      "userExitImpact": "Permissionless deadline and claim paths remain available without an administrator."
+    }
+  ],
+  "dependencies": {
+    "onchain": [],
+    "offchain": []
+  },
+  "operations": {
+    "keeper": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "oracle": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "monitoring": "Reconcile confirmed WETH balances, native claims, bankroll, ticket and fee liabilities; alert on mismatches, stale randomness and stalled settlement.",
+    "incidentResponse": "There is no pause or upgrade. Publish the affected chain, hook, PoolId and block, stop product routing, preserve player exits and require a new reviewed hook for code changes."
+  },
+  "integration": {
+    "routerGeneration": null,
+    "routerDependencyId": null,
+    "permit2DependencyId": null,
+    "stateViewDependencyId": null,
+    "quoterDependencyId": null,
+    "sdkDependencies": [],
+    "routerActionProfile": {
+      "routerVersionExplicit": null,
+      "universalRouterCommand": null,
+      "v4Actions": [],
+      "settlementMode": null,
+      "permit2Mode": null,
+      "finalSwapDeltaValidated": null
+    },
+    "appSourcePaths": [],
+    "integrationTestPaths": [],
+    "quoteExecutionParity": null,
+    "swapModes": [
+      "zeroForOne-exactInput",
+      "zeroForOne-exactOutput",
+      "oneForZero-exactInput",
+      "oneForZero-exactOutput"
+    ],
+    "partialFills": "Ordinary unspecified-quote modes charge executed deltas; wager partial fills and specified-quote mismatches revert.",
+    "slippage": "Ordinary routers enforce their settings; the wager router enforces minimum output and a price limit.",
+    "deadline": "The wager router rejects calls after the user-supplied timestamp.",
+    "permit2": "Not used by the wager router; token input uses a direct ERC-20 allowance.",
+    "stateReads": "Read game, ticket, liability and bankroll state from the hook and randomness status from the adapter.",
+    "events": [
+      "BankrollTokenLaunched",
+      "BankrollLiquidityConfigured",
+      "BankrollInitialBuy",
+      "PositionFeesCollected",
+      "HookDeployed",
+      "FundingOpened",
+      "GameActivated",
+      "WagerStaged",
+      "TicketCreated",
+      "RandomnessRequested",
+      "RandomnessConsumed",
+      "RandomnessExpired",
+      "TicketSettled",
+      "TicketClaimed",
+      "GameFinalized",
+      "BankrollRedeemed",
+      "ProgrammableFeeAccrued",
+      "ProgrammableFeesClaimed"
+    ],
+    "routingAndDiscoverability": {
+      "routingMode": "not-planned",
+      "allowlistTriggers": {
+        "usesDeltaFlag": true,
+        "addressStartsWith91": false,
+        "targetsMajorPair": false,
+        "permissionedPool": false
+      },
+      "uniswapRoutingStatus": "not-applicable",
+      "hookRegistryStatus": "not-submitted",
+      "customHookDataRequired": false,
+      "standardRouterCompatible": true,
+      "permissionedRouting": {
+        "required": false,
+        "minimumRouterGeneration": null,
+        "adapterCurrencyUsed": null,
+        "allowedWrapperBindings": null,
+        "positionManagerBinding": null,
+        "routingAllowlistRequiredPerChain": null
+      },
+      "sourcePaths": [],
+      "testPaths": []
+    },
+    "dataReconstruction": {
+      "mode": "events-with-confirmed-reads",
+      "eventCoverage": "Hook events cover game, ticket, fee and claim transitions; confirmed reads reconcile aggregate liabilities and state.",
+      "cursor": "block-number-transaction-index-log-index",
+      "startBlockPolicy": "Start at HookDeployed for the exact chain and hook.",
+      "finalityDepth": 12,
+      "reorgPolicy": "Roll back to the last finalized cursor and replay before publishing state.",
+      "backfillPolicy": "Replay every hook event from deployment.",
+      "checkpointPolicy": "Checkpoint game state, ticket count, bankroll and liabilities at finalized blocks.",
+      "freshnessTargetSeconds": 60,
+      "staleAfterSeconds": 300,
+      "freshnessMeasurement": "Wall-clock lag from chain head to the last indexed finalized block.",
+      "reconciliation": "Compare indexed aggregates with confirmed hook getters and PoolManager native claim balance.",
+      "reserveReconstruction": {
+        "used": true,
+        "balanceSources": [
+          "Hook WETH balance",
+          "Hook native PoolManager claim balance"
+        ],
+        "liabilitySources": [
+          "Hook bankroll, open stake, player claim and programmable liability getters"
+        ],
+        "attributionKeys": [
+          "chainId",
+          "poolId",
+          "currency",
+          "beneficiary"
+        ],
+        "solvencyEquation": "WETH balance covers WETH ledgers and native claims cover the fee liability.",
+        "poolLiquidityTreatment": "excluded-from-hook-reserves",
+        "donationAndDustPolicy": "Direct donations create no shares or liabilities.",
+        "reconciliation": "Withhold data and alert on any confirmed mismatch."
+      },
+      "sourcePaths": [
+        "src/bankroll/BankrollHook.sol"
+      ],
+      "testPaths": [
+        "test/bankroll/BankrollLifecycle.t.sol"
+      ]
+    },
+    "platformHandoff": {
+      "intended": true,
+      "websiteRegistryPath": null,
+      "uiSourcePaths": [],
+      "apiSourcePaths": [],
+      "indexerSourcePaths": [],
+      "testPaths": [],
+      "reviewStatus": "not-requested",
+      "maintainerReviewRequired": true,
+      "selfApproval": false,
+      "availabilityClaimed": false,
+      "handoffNotes": "The repository includes an offchain React review demo, but this proposal does not claim it as a reviewed or routed product client. It does not include a production API, indexer, routing registration, monitoring or deployment. Maintainers must review the client and exact deployment bindings before any product integration."
+    }
+  },
+  "projectSurfaces": [
+    {
+      "id": "canonical-pool-model",
+      "kind": "onchain-contract",
+      "name": "Canonical pool model",
+      "summary": "The canonical launch token, PoolKey and optional hook behavior reviewed as one onchain project boundary.",
+      "executionBoundary": "onchain",
+      "capabilityIds": [
+        "canonical-pool-state"
+      ],
+      "authorityRefs": [],
+      "valueFlowRefs": [],
+      "assetRefs": [],
+      "sourcePaths": [],
+      "testPaths": [],
+      "schemaPaths": [],
+      "evidencePaths": [],
+      "exposure": {
+        "movesValue": false,
+        "usesSignatures": false,
+        "makesExternalCalls": false,
+        "holdsCustody": false,
+        "handlesPii": false,
+        "usesGeolocation": false,
+        "usesSecrets": false
+      },
+      "profiles": {
+        "authority": {
+          "status": "applicable",
+          "summary": "PoolManager callback authentication and the declared launch authorities bound in this submission govern the exact onchain boundary.",
+          "controls": [
+            "Authenticate every hook callback through the exact PoolManager and declared pool-admission rule."
+          ],
+          "evidenceRefs": []
+        },
+        "valueFlow": {
+          "status": "not-applicable",
+          "summary": "This starter surface declares no additional value movement beyond standard PoolManager settlement until a capability changes that boundary.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceOfTruth": {
+          "status": "applicable",
+          "summary": "Confirmed PoolManager and contract state for the exact chain and PoolId is the authoritative source of truth.",
+          "controls": [
+            "Key every state read and emitted event by the exact chain, model revision and PoolId."
+          ],
+          "evidenceRefs": []
+        },
+        "signaturesReplay": {
+          "status": "not-applicable",
+          "summary": "The starter surface consumes no model-specific signed message or signed offchain payload.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "externalCalls": {
+          "status": "not-applicable",
+          "summary": "The starter surface makes no model-specific external call beyond authenticated protocol execution.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "custody": {
+          "status": "not-applicable",
+          "summary": "The starter surface retains no token, liquidity position, PoolManager claim or beneficiary balance.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "piiGeolocation": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface collects no private identity data or precise user geolocation.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "secretBoundary": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface assumes no secret can remain confidential in contract state or calldata.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceTestSchema": {
+          "status": "applicable",
+          "summary": "The implementation manifest binds the exact source, tests, compiler input and specification reviewed for this boundary.",
+          "controls": [
+            "Bind prototype source and tests to implementation paths and include every imported executable byte in the review target."
+          ],
+          "evidenceRefs": []
+        },
+        "failureRecovery": {
+          "status": "applicable",
+          "summary": "An invalid callback or state transition reverts atomically and does not block the separately declared user exit path.",
+          "controls": [
+            "Test dependency failure, callback revert and recovery without partial settlement or trapped user funds."
+          ],
+          "evidenceRefs": []
+        }
+      },
+      "signedDataSource": {
+        "used": false,
+        "signerAuthorityRefs": [],
+        "signatureScheme": null,
+        "payloadSchemaPath": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "onchainVerifierSurfaceId": null
+      },
+      "onchainOracleVerifier": {
+        "used": false,
+        "verifiedSourceSurfaceIds": [],
+        "verificationRule": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "failureRule": null
+      }
+    }
+  ],
+  "projectCapabilities": [
+    {
+      "id": "canonical-pool-state",
+      "kind": "state-observation",
+      "summary": "Read and update only the declared canonical PoolId state without adding value custody or an offchain trust dependency.",
+      "surfaceIds": [
+        "canonical-pool-model"
+      ],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": false,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": false,
+        "custody": false,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": [
+        "authority",
+        "failure-recovery",
+        "source-of-truth",
+        "source-test-schema"
+      ]
+    }
+  ],
+  "capabilities": {
+    "externalCalls": {
+      "used": true,
+      "targets": [
+        "Uniswap v4 PoolManager",
+        "Uniswap v4 PositionManager",
+        "UERC20 factory",
+        "WETH",
+        "Chainlink VRF v2.5 wrapper"
+      ],
+      "callSites": [
+        "BankrollLaunchV1 token, pool, position and initial-buy flow",
+        "BankrollHook claim and WETH flows",
+        "BankrollRouter unlock",
+        "PermanentPositionLocker fee collection",
+        "ChainlinkVrfV25Adapter request"
+      ],
+      "reentrancyPolicy": "Transient reentrancy guards on value-moving public paths; authenticated callbacks remain available only to their immutable callers.",
+      "stateDriftPolicy": "Immutable dependencies and atomic state transitions; request quote has caller maximum and exact payment.",
+      "returnValuePolicy": "Decode and validate PoolManager unlocks; SafeERC20 checks token calls; Chainlink base handles wrapper calls.",
+      "failureAtomicity": "External failure reverts the complete action except a later permissionless randomness timeout."
+    },
+    "permissionedAsset": {
+      "used": false,
+      "officialUniswapPermissionedPool": null,
+      "issuer": null,
+      "jurisdiction": null,
+      "legalDocuments": [],
+      "underlyingClaim": null,
+      "custodian": null,
+      "adapter": null,
+      "hooks": null,
+      "positionManager": null,
+      "swapEligibility": null,
+      "liquidityEligibility": null,
+      "positionTransferability": null,
+      "pauseFreezeUnwind": null,
+      "redemption": null,
+      "routingLimitations": null
+    },
+    "oracle": {
+      "used": false,
+      "source": null,
+      "value": null,
+      "deployment": null,
+      "runtimeHash": null,
+      "decimals": null,
+      "heartbeatSeconds": null,
+      "maxAgeSeconds": null,
+      "observationType": null,
+      "windowSeconds": null,
+      "minimumAnswer": null,
+      "maximumAnswer": null,
+      "maximumDeviation": null,
+      "roundChecks": null,
+      "manipulationResistance": null,
+      "governance": null,
+      "fallback": null,
+      "maxFallbackAgeSeconds": null,
+      "failureRule": null
+    },
+    "keeper": {
+      "used": false,
+      "executionMode": null,
+      "minIntervalSeconds": null,
+      "maxDelaySeconds": null,
+      "permissionlessFallbackAfterSeconds": null,
+      "idempotencyKey": null,
+      "duplicateBehavior": null,
+      "lastProcessedState": null,
+      "boundedWork": null,
+      "maxItems": null,
+      "retryPolicy": null,
+      "zeroWorkBehavior": null,
+      "fundingSource": null,
+      "minimumGasRunway": null,
+      "alertThreshold": null,
+      "maximumGas": null,
+      "failureImpact": null,
+      "userExitIndependent": null,
+      "poolBinding": null,
+      "slippage": null,
+      "deadline": null,
+      "mevPolicy": null
+    },
+    "proof": {
+      "used": false,
+      "proofSystem": null,
+      "circuitRevision": null,
+      "verifyingKeyHash": null,
+      "verifierAddress": null,
+      "runtimeHash": null,
+      "setupType": null,
+      "setupProvenance": null,
+      "publicInputs": [],
+      "domainBindings": {
+        "chainId": null,
+        "verifyingContract": null,
+        "modelVersion": null,
+        "pool": null,
+        "action": null,
+        "actorOrRecipient": null,
+        "amountBounds": null,
+        "epochOrDeadline": null
+      },
+      "replayMode": null,
+      "nullifierScope": null,
+      "nullifierDerivation": null,
+      "nullifierStorage": null,
+      "atomicSpentCheck": null,
+      "resetPolicy": null,
+      "maximumProofBytes": null,
+      "maximumVerificationGas": null,
+      "verifierAuthority": null,
+      "failureRule": null,
+      "privacyClaim": null,
+      "metadataLeakage": null
+    },
+    "crossChain": {
+      "used": false,
+      "bridgeDependencyId": null,
+      "source": {
+        "network": {
+          "namespace": null,
+          "reference": null
+        },
+        "domain": null,
+        "authenticatedSender": {
+          "encoding": null,
+          "value": null,
+          "canonicalizationRule": null
+        }
+      },
+      "destination": {
+        "chainId": null,
+        "domain": null,
+        "receiver": null,
+        "receiverDependencyId": null,
+        "authenticatedBridgeCaller": null
+      },
+      "message": {
+        "identifierDerivation": null,
+        "nonceDerivation": null,
+        "nonceScope": null,
+        "customNonceRule": null,
+        "payloadHashRule": null,
+        "idempotencyKeyRule": null,
+        "idempotencyStorage": null,
+        "atomicConsumption": null,
+        "duplicateBehavior": null,
+        "domainBindings": {
+          "bridgeDependencyId": null,
+          "sourceNetwork": null,
+          "sourceDomain": null,
+          "sourceSender": null,
+          "destinationChainId": null,
+          "destinationDomain": null,
+          "receiver": null,
+          "receiverDependencyId": null,
+          "modelId": null,
+          "poolId": null,
+          "action": null,
+          "payloadHash": null,
+          "timestampOrExpiry": null,
+          "messageId": null,
+          "nonce": null
+        }
+      },
+      "finality": {
+        "mode": null,
+        "minimumSourceConfirmations": null,
+        "challengePeriodSeconds": null,
+        "attestationRule": null,
+        "reorgBehavior": null,
+        "customFinalityRule": null
+      },
+      "ordering": {
+        "mode": null,
+        "sequenceKey": null,
+        "outOfOrderBehavior": null,
+        "maximumPendingMessages": null,
+        "queueOverflowBehavior": null,
+        "pendingMessageExpirySeconds": null,
+        "cleanupRule": null,
+        "releaseRule": null
+      },
+      "staleness": {
+        "timestampSource": null,
+        "customTimestampRule": null,
+        "maximumMessageAgeSeconds": null,
+        "maximumFutureSkewSeconds": null,
+        "staleMessageBehavior": null
+      },
+      "failureBehavior": null,
+      "failureRule": null,
+      "fallback": {
+        "mode": null,
+        "authority": null,
+        "rule": null
+      },
+      "quarantine": {
+        "used": null,
+        "storageRule": null,
+        "maximumEntries": null,
+        "entryExpirySeconds": null,
+        "overflowBehavior": null,
+        "cleanupRule": null,
+        "releaseMode": null,
+        "releaseRule": null,
+        "releaseAuthority": null,
+        "atomicRelease": null
+      }
+    },
+    "externalLiquidity": {
+      "used": true,
+      "custody": "The hook holds WETH bankroll and liabilities, not an external yield position.",
+      "ownership": "Internal non-transferable shares own the residual bankroll pro rata.",
+      "shareAccounting": "One share per WETH deposit during Funding; pro-rata redemption after finalisation.",
+      "solvencyEquation": "WETH balance >= bankroll assets + open stakes + player claims.",
+      "lossAllocation": "Winning exposure reduces bankroll assets; losing stakes increase them.",
+      "donationPolicy": "Direct donations mint no shares and do not increase recorded assets.",
+      "exitPath": "Funding withdrawal or terminal redemption.",
+      "dependencyFailure": "A failed WETH transfer reverts without changing final accounting."
+    },
+    "asyncSwap": {
+      "used": false,
+      "supportedExactness": null,
+      "custody": null,
+      "fillRule": null,
+      "partialFillRule": null,
+      "cancellation": null,
+      "expiry": null,
+      "refund": null,
+      "queueBound": null,
+      "liveness": null,
+      "failureRule": null
+    },
+    "customCurve": {
+      "used": false,
+      "invariant": null,
+      "domain": null,
+      "rounding": null,
+      "monotonicity": null,
+      "discontinuities": null,
+      "inverse": null,
+      "differentialReference": null,
+      "failureRule": null
+    }
+  },
+  "capabilityExtensions": [],
+  "tokenBehaviorExtensions": [],
+  "security": {
+    "usesTxOrigin": false,
+    "userControlledDelegatecall": false,
+    "arbitraryExecution": false,
+    "unboundedCriticalLoop": false,
+    "ignoredCallResults": false,
+    "hiddenControls": false,
+    "assumesOnchainSecrecy": false,
+    "bypassesHookAddressValidation": false,
+    "signatureScheme": {
+      "used": false,
+      "standard": null,
+      "nonce": null,
+      "deadline": null,
+      "chain": null,
+      "verifyingContract": null,
+      "action": null,
+      "parameters": null,
+      "erc1271": null
+    }
+  },
+  "implementation": {
+    "sourcePaths": [
+      "src/bankroll/BankrollHook.sol",
+      "src/bankroll/BankrollHookFactory.sol",
+      "src/bankroll/BankrollLaunchV1.sol",
+      "src/bankroll/BankrollRouter.sol",
+      "src/bankroll/PermanentPositionLocker.sol",
+      "src/bankroll/interfaces/IBankrollHook.sol",
+      "src/bankroll/interfaces/IRandomnessAdapter.sol",
+      "src/bankroll/libraries/BankrollHookData.sol",
+      "src/bankroll/libraries/BankrollMath.sol",
+      "src/bankroll/libraries/ProgrammableFeeMath.sol",
+      "src/bankroll/randomness/ChainlinkVrfV25Adapter.sol",
+      "src/bankroll/types/BankrollTypes.sol"
+    ],
+    "testPaths": [
+      "test/bankroll/BankrollLaunchV1.t.sol",
+      "test/bankroll/BankrollLifecycle.t.sol",
+      "test/bankroll/unit/BankrollMath.t.sol",
+      "test/bankroll/unit/HookData.t.sol",
+      "test/bankroll/unit/ProgrammableFeeMath.t.sol"
+    ],
+    "compilerBuildInfoPaths": [],
+    "specificationPath": "MECHANISM.md",
+    "testEvidencePath": "submissions/bankroll-hook/EVIDENCE.md",
+    "dependencyLockPath": "submissions/bankroll-hook/dependency-lock.json",
+    "gateStatusPath": null,
+    "reviewTargetPath": null,
+    "runtimeAssetManifestPath": null
+  },
+  "risk": {
+    "dimensions": {
+      "complexity": 3,
+      "customMath": 2,
+      "externalDependencies": 3,
+      "externalLiquidity": 3,
+      "valueAtRisk": 3,
+      "teamMaturity": 2,
+      "upgradeability": 0,
+      "autonomy": 2,
+      "priceImpact": 1
+    },
+    "rationales": {
+      "complexity": "Four fee quadrants, transient PoolManager accounting and a finite asynchronous game interact.",
+      "customMath": "Payout, utilisation, exact-output gross-up and pro-rata redemption are small and fuzzed.",
+      "externalDependencies": "PoolManager, PositionManager, UERC20 factory, WETH and Chainlink VRF are immutable runtime dependencies.",
+      "externalLiquidity": "The hook holds a separately funded bankroll and player liabilities.",
+      "valueAtRisk": "Bankroll, stakes, payouts and fee claims remain in the hook until exit.",
+      "teamMaturity": "No independent review, public commit or deployment evidence exists yet.",
+      "upgradeability": "There is no upgrade or mutable admin path.",
+      "autonomy": "Permissionless callers progress deadlines, randomness and bounded settlement.",
+      "priceImpact": "The hook charges 10 bps but does not change the LP curve or fee."
+    },
+    "declaredTotal": 19,
+    "declaredTier": "high",
+    "featureTriggers": [
+      "autonomous",
+      "custom-accounting",
+      "custom-math",
+      "external-calls",
+      "external-liquidity",
+      "hook-held-liquidity",
+      "price-impact",
+      "return-delta"
+    ]
+  },
+  "disclosures": [
+    "Local prototype only: not audited, accepted, deployed, verified, routed, monitored or available.",
+    "The launch flow has local integration evidence only. Its exact Ethereum deployment dependencies remain unverified.",
+    "The current official Ethereum launchpad profile is reference-conflicted and runtime-unverified.",
+    "A wager has equal win and loss probability, pays 1.96x gross on a win and has a 2% expected house edge.",
+    "The project fee is zero; the mandatory 10 bps fee belongs only to the immutable Programmable owner."
+  ],
+  "unresolved": []
+}

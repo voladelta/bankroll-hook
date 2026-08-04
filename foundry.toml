@@ -1,0 +1,36 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+cache_path = "cache"
+libs = ["node_modules", "lib"]
+solc_version = "0.8.26"
+auto_detect_remappings = false
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 5000
+via_ir = true
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+build_info = true
+build_info_path = "out/build-info"
+extra_output = ["storageLayout", "metadata"]
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.default.invariant]
+runs = 128
+depth = 48
+fail_on_revert = false
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+wrap_comments = true
