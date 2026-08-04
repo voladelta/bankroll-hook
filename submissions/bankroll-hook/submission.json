@@ -329,10 +329,10 @@
     "hookData": {
       "used": true,
       "schema": "abi.encode(uint8 version=1, bytes32 pendingId), exact length 64",
-      "identitySource": "trusted-router-decoded-user",
+      "identitySource": "none",
       "trustedRouterDeploymentRecordId": null,
       "callbackSenderRule": "pool-manager-callback-and-exact-router-binding",
-      "validation": "Check sender, exact-input mode, version, length, pending id, same block, Active state and deadline."
+      "validation": "Hook data carries no user identity. Check the immutable router sender, exact-input mode, version, length, previously staged pending id, same block, Active state and deadline."
     },
     "feeMechanism": {
       "used": true,

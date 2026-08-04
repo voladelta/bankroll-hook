@@ -8,9 +8,9 @@ Evidence state: public GitHub source; the generated application package binds th
 
 The implementation uses one custom hook because wager admission and the mandatory fee both need atomic PoolManager execution. The hook integrates the 10 bps Programmable fee directly.
 
-The regenerated local compatibility report says `REDESIGN_REQUIRED`. It has one blocker: the trusted wager router does not yet have an exact onchain deployment record with source and runtime evidence. The hook mask is `0x30cc`. The package passes proposal intake structure but is not prototype-intake validated.
+The regenerated local compatibility report says `PROTOTYPE_READY` with no deterministic blockers. The hook mask is `0x30cc`. The report retains warnings for return-delta specialist review, the novel game architecture and deterministic Solidity import closure.
 
-The final local package check passed proposal structure with submission hash `sha256:4971c933022a39ae61b9db4016811507f73f0aa66672ffb44124430807eeeebb`. It reported `intakeValidated=true`, `prototypeIntakeValidated=false`, `accepted=false`, `available=false` and `releaseEligible=false`.
+The final local package check passed proposal structure with submission hash `sha256:e918780717e06b95e13460a287e93ed68398b178295a9761590377b589d412ed`. It reported `designReadyForPrototype=true` and `intakeValidated=true`. The application stage remains proposal, so `prototypeIntakeValidated=false` by definition. It also reported `accepted=false`, `available=false` and `releaseEligible=false`.
 
 The current Programmable repository is release `programmable-v4-builder-v0.2.1` at commit `0f2a2704216ba3eeb3c9761466aa9197abe927bc`. Its official Ethereum launchpad profile is marked `reference-conflicted-runtime-unverified`. The project therefore makes no mainnet-launch claim.
 
