@@ -925,7 +925,8 @@
         "src/bankroll/BankrollHook.sol"
       ],
       "testPaths": [
-        "test/bankroll/BankrollLifecycle.t.sol"
+        "test/bankroll/BankrollLifecycle.t.sol",
+        "test/bankroll/invariant/BankrollSolvency.invariant.t.sol"
       ]
     },
     "platformHandoff": {
@@ -1375,6 +1376,7 @@
     "testPaths": [
       "test/bankroll/BankrollLaunchV1.t.sol",
       "test/bankroll/BankrollLifecycle.t.sol",
+      "test/bankroll/invariant/BankrollSolvency.invariant.t.sol",
       "test/bankroll/unit/BankrollMath.t.sol",
       "test/bankroll/unit/HookData.t.sol",
       "test/bankroll/unit/ProgrammableFeeMath.t.sol"
