@@ -45,7 +45,7 @@
       "severity": "warning",
       "code": "SOLIDITY_IMPORT_RESOLUTION_UNPROVEN",
       "path": "$.closure.SOLIDITY_IMPORT_RESOLUTION_UNPROVEN",
-      "message": "A Solidity import cannot be resolved under the deterministic beta scanner's declared build profile. 83 diagnostics recorded; first path: src/bankroll/BankrollHook.sol.",
+      "message": "A Solidity import cannot be resolved under the deterministic beta scanner's declared build profile. 84 diagnostics recorded; first path: src/bankroll/BankrollHook.sol.",
       "remediation": "Bind the exact build configuration, package provenance and resolved compiler source graph for this revision."
     }
   ],
@@ -593,6 +593,11 @@
       {
         "code": "SOLIDITY_IMPORT_RESOLUTION_UNPROVEN",
         "detail": "The deterministic beta scanner cannot resolve Solidity import \"@openzeppelin/contracts/token/ERC20/IERC20.sol\" under this repository build profile.",
+        "path": "test/bankroll/BankrollLifecycle.t.sol"
+      },
+      {
+        "code": "SOLIDITY_IMPORT_RESOLUTION_UNPROVEN",
+        "detail": "The deterministic beta scanner cannot resolve Solidity import \"@openzeppelin/uniswap-hooks/src/base/BaseHook.sol\" under this repository build profile.",
         "path": "test/bankroll/BankrollLifecycle.t.sol"
       },
       {

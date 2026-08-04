@@ -25,6 +25,7 @@ runs = 512
 runs = 128
 depth = 48
 fail_on_revert = false
+show_metrics = true
 
 [fmt]
 line_length = 120

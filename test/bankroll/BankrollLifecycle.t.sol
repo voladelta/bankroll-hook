@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { BaseHook } from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -18,6 +19,7 @@ import { BankrollHookFactory, BankrollRouterFactory } from "../../src/bankroll/B
 import { BankrollRouter, IWETH } from "../../src/bankroll/BankrollRouter.sol";
 import { IRandomnessAdapter } from "../../src/bankroll/interfaces/IRandomnessAdapter.sol";
 import { IBankrollHook } from "../../src/bankroll/interfaces/IBankrollHook.sol";
+import { BankrollHookData } from "../../src/bankroll/libraries/BankrollHookData.sol";
 import { BankrollConfig, GameState, Ticket, TicketStatus } from "../../src/bankroll/types/BankrollTypes.sol";
 import { MockToken, MockWeth } from "./helpers/MockAssets.sol";
 import { MockRandomnessAdapter } from "./helpers/MockRandomnessAdapter.sol";
@@ -195,6 +197,230 @@ contract BankrollLifecycleTest is Deployers {
         assertGt(hook.totalProgrammableFeesAccrued(), afterSellExactInput);
         assertEq(hook.ticketCount(), 0);
         assertEq(hook.programmableLiability(), hook.totalProgrammableFeesAccrued());
+    }
+
+    function testWrongManagerAndMalformedGameDataCannotEnterCallback() public {
+        SwapParams memory params =
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(1 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT });
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.beforeSwap(address(bankrollRouter), hookKey, params, hex"01");
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollHookData.InvalidHookDataLength.selector, uint256(1)));
+        vm.prank(address(manager));
+        hook.beforeSwap(address(bankrollRouter), hookKey, params, hex"01");
+    }
+
+    function testOrdinaryRouterCannotUseGameHookData() public {
+        bytes memory hookData = BankrollHookData.encode(keccak256("unstaged wager"));
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.UnauthorizedRouter.selector, address(swapRouter)));
+        vm.prank(address(manager));
+        hook.beforeSwap(
+            address(swapRouter),
+            hookKey,
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(1 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            hookData
+        );
+    }
+
+    function testPendingWagerCannotBeReplayedOrConsumedInAnotherBlock() public {
+        bytes32 pendingId = keccak256("one use only");
+        _stagePendingWager(pendingId, 0.1 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.PendingWagerAlreadyExists.selector, pendingId));
+        vm.prank(address(bankrollRouter));
+        hook.stageWager(pendingId, address(this), 0.1 ether);
+
+        vm.roll(block.number + 1);
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.PendingWagerWrongBlock.selector, pendingId));
+        vm.prank(address(manager));
+        hook.beforeSwap(
+            address(bankrollRouter),
+            hookKey,
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(1 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            BankrollHookData.encode(pendingId)
+        );
+    }
+
+    function testExactOutputWagerIsRejected() public {
+        bytes32 pendingId = keccak256("exact output wager");
+        _stagePendingWager(pendingId, 0.1 ether);
+
+        vm.expectRevert(BankrollHook.WagerExactOutputUnsupported.selector);
+        vm.prank(address(manager));
+        hook.beforeSwap(
+            address(bankrollRouter),
+            hookKey,
+            SwapParams({ zeroForOne: true, amountSpecified: int256(0.01 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            BankrollHookData.encode(pendingId)
+        );
+    }
+
+    function testVolumeCapFailureRevertsTheCompleteWagerTransaction() public {
+        uint256 accountedBefore = hook.accountedWeth();
+        uint64 nonceBefore = bankrollRouter.nonce();
+
+        vm.expectRevert();
+        bankrollRouter.gameSwapExactInput{ value: 0.15 ether }(
+            true, 0.1 ether, 0, 0.05 ether, MIN_PRICE_LIMIT, block.timestamp, address(this)
+        );
+
+        assertEq(hook.accountedWeth(), accountedBefore);
+        assertEq(bankrollRouter.nonce(), nonceBefore);
+        assertEq(weth.balanceOf(address(bankrollRouter)), 0);
+        assertEq(hook.ticketCount(), 0);
+    }
+
+    function testRandomnessCannotExpireEarlyOrAfterFulfillment() public {
+        _createTicketAndClose();
+        uint256 expiryBlock = uint256(hook.closedAtBlock()) + hook.requestGraceBlocks();
+        vm.roll(expiryBlock - 1);
+        vm.expectRevert(BankrollHook.RandomnessDeadlineNotReached.selector);
+        hook.expireRandomness();
+
+        hook.requestRandomness{ value: 0.01 ether }(0.01 ether);
+        randomness.fulfill(hook.requestKey(), bytes32(uint256(11)));
+        vm.roll(uint256(hook.requestBlock()) + hook.fulfillmentTimeoutBlocks());
+        vm.expectRevert(BankrollHook.RandomnessAlreadyFinal.selector);
+        hook.expireRandomness();
+    }
+
+    function testTicketCannotClaimTwice() public {
+        _createTicketAndClose();
+        vm.roll(uint256(hook.closedAtBlock()) + hook.requestGraceBlocks());
+        hook.expireRandomness();
+
+        hook.claimTicket(1);
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.TicketNotClaimable.selector, uint64(1)));
+        hook.claimTicket(1);
+    }
+
+    function testTicketCannotSettleTwice() public {
+        _createTicketAndClose();
+        hook.requestRandomness{ value: 0.01 ether }(0.01 ether);
+        randomness.fulfill(hook.requestKey(), bytes32(uint256(7)));
+        hook.pullRandomness();
+
+        hook.settleTicket(1);
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.TicketNotOpen.selector, uint64(1)));
+        hook.settleTicket(1);
+    }
+
+    function testOnlyBoundRouterCanStageWagers() public {
+        address attacker = makeAddr("untrusted router");
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.UnauthorizedRouter.selector, attacker));
+        vm.prank(attacker);
+        hook.stageWager(keccak256("unauthorized"), attacker, 0.1 ether);
+    }
+
+    function testStakeBoundsAndBankrollCapacityAreEnforced() public {
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.StakeBelowMinimum.selector, 0.009 ether, 0.01 ether));
+        vm.prank(address(bankrollRouter));
+        hook.stageWager(keccak256("below minimum"), address(this), 0.009 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.StakeAboveMaximum.selector, 10.01 ether, 10 ether));
+        vm.prank(address(bankrollRouter));
+        hook.stageWager(keccak256("above maximum"), address(this), 10.01 ether);
+
+        _fundRouterWeth(80 ether);
+        for (uint256 index; index < 8; ++index) {
+            vm.prank(address(bankrollRouter));
+            hook.stageWager(keccak256(abi.encode("capacity", index)), address(this), 10 ether);
+        }
+
+        vm.expectRevert(
+            abi.encodeWithSelector(BankrollHook.InsufficientBankrollCapacity.selector, 3.2 ether, 9.6 ether)
+        );
+        vm.prank(address(bankrollRouter));
+        hook.stageWager(keccak256("over capacity"), address(this), 10 ether);
+    }
+
+    function testRouterDeadlineNativeValueAndMinimumOutputAreAtomic() public {
+        vm.warp(block.timestamp + 1);
+        vm.expectRevert(abi.encodeWithSelector(BankrollRouter.DeadlineExpired.selector, uint256(1), uint256(2)));
+        bankrollRouter.gameSwapExactInput{ value: 1.1 ether }(
+            true, 1 ether, 0, 0.1 ether, MIN_PRICE_LIMIT, block.timestamp - 1, address(this)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollRouter.InvalidNativeValue.selector, 1.1 ether, 1 ether));
+        bankrollRouter.gameSwapExactInput{ value: 1 ether }(
+            true, 1 ether, 0, 0.1 ether, MIN_PRICE_LIMIT, block.timestamp, address(this)
+        );
+
+        uint256 accountedBefore = hook.accountedWeth();
+        uint64 nonceBefore = bankrollRouter.nonce();
+        vm.expectPartialRevert(BankrollRouter.MinimumOutputNotMet.selector);
+        bankrollRouter.gameSwapExactInput{ value: 1.1 ether }(
+            true, 1 ether, type(uint256).max, 0.1 ether, MIN_PRICE_LIMIT, block.timestamp, address(this)
+        );
+        assertEq(hook.accountedWeth(), accountedBefore);
+        assertEq(bankrollRouter.nonce(), nonceBefore);
+        assertEq(hook.ticketCount(), 0);
+    }
+
+    function testAlternatePoolAndDirectRouterCallbackAreRejected() public {
+        PoolKey memory alternateKey = hookKey;
+        alternateKey.tickSpacing = 400;
+        vm.expectRevert(BankrollHook.InvalidPoolKey.selector);
+        vm.prank(address(manager));
+        hook.beforeSwap(
+            address(bankrollRouter),
+            alternateKey,
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(1 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            ZERO_BYTES
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(BankrollRouter.UnauthorizedCallback.selector, address(this)));
+        bankrollRouter.unlockCallback(ZERO_BYTES);
+    }
+
+    function testRequestedRandomnessTimeoutRefundsAndFinalStateCannotReactivate() public {
+        _createTicketAndClose();
+        hook.requestRandomness{ value: 0.01 ether }(0.01 ether);
+        vm.roll(uint256(hook.requestBlock()) + hook.fulfillmentTimeoutBlocks());
+        hook.expireRandomness();
+        hook.finalizeGame();
+
+        assertEq(uint256(hook.state()), uint256(GameState.Finalized));
+        vm.expectRevert(abi.encodeWithSelector(BankrollHook.InvalidState.selector, GameState.Finalized));
+        hook.activateGame();
+
+        uint256 balanceBefore = weth.balanceOf(address(this));
+        hook.claimTicket(1);
+        assertEq(weth.balanceOf(address(this)), balanceBefore + 0.1 ether);
+    }
+
+    function testProgrammableFeeCannotBeClaimedTwiceOrToZeroAddress() public {
+        _ordinarySwap(true, -int256(1 ether), 1 ether);
+
+        vm.startPrank(hook.PROGRAMMABLE_FEE_OWNER());
+        vm.expectRevert(BankrollHook.ZeroAddress.selector);
+        hook.claimProgrammableFeesTo(address(0));
+        hook.claimProgrammableFees();
+        vm.expectRevert(BankrollHook.NoFeesToClaim.selector);
+        hook.claimProgrammableFees();
+        vm.stopPrank();
+    }
+
+    function _createTicketAndClose() private {
+        bankrollRouter.gameSwapExactInput{ value: 1.1 ether }(
+            true, 1 ether, 0, 0.1 ether, MIN_PRICE_LIMIT, block.timestamp, address(this)
+        );
+        vm.roll(hook.closeBlockExclusive());
+        hook.closeGame();
+    }
+
+    function _stagePendingWager(bytes32 pendingId, uint128 stake) private {
+        _fundRouterWeth(stake);
+        vm.prank(address(bankrollRouter));
+        hook.stageWager(pendingId, address(this), stake);
+    }
+
+    function _fundRouterWeth(uint256 amount) private {
+        vm.deal(address(bankrollRouter), amount);
+        vm.prank(address(bankrollRouter));
+        weth.deposit{ value: amount }();
     }
 
     function _ordinarySwap(bool zeroForOne, int256 amountSpecified, uint256 value) private returns (BalanceDelta) {

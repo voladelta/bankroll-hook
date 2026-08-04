@@ -2,7 +2,7 @@
 
 Evidence date: 4 August 2026
 
-Evidence state: public GitHub source; the generated application package binds the exact clean commit
+Evidence state: source evidence for the exact public commit bound by the generated application package
 
 ## Compatibility
 
@@ -10,7 +10,7 @@ The implementation uses one custom hook because wager admission and the mandator
 
 The regenerated local compatibility report says `PROTOTYPE_READY` with no deterministic blockers. The hook mask is `0x30cc`. The report retains warnings for return-delta specialist review, the novel game architecture and deterministic Solidity import closure.
 
-The final local package check passed proposal structure with submission hash `sha256:e918780717e06b95e13460a287e93ed68398b178295a9761590377b589d412ed`. It reported `designReadyForPrototype=true` and `intakeValidated=true`. The application stage remains proposal, so `prototypeIntakeValidated=false` by definition. It also reported `accepted=false`, `available=false` and `releaseEligible=false`.
+The Builder package check passed proposal structure. The generated application package records the exact public source commit, source tree, submission hash and review-target hash. The application stage remains proposal.
 
 The current Programmable repository is release `programmable-v4-builder-v0.2.1` at commit `0f2a2704216ba3eeb3c9761466aa9197abe927bc`. Its official Ethereum launchpad profile is marked `reference-conflicted-runtime-unverified`. The project therefore makes no mainnet-launch claim.
 
@@ -18,7 +18,7 @@ The current Programmable repository is release `programmable-v4-builder-v0.2.1` 
 
 | Check | Result | Scope |
 | --- | --- | --- |
-| `forge test -vv` | 18 tests passed, no failures | unit, 512-run fuzz, lifecycle integration and launch integration |
+| `forge test -vv` | 37 tests passed, no failures | unit, 512-run fuzz, adversarial lifecycle, launch integration and stateful invariants |
 | `forge lint` | passed with no findings | first-party Solidity |
 | `npm run build` | passed | first-party runtime and init code below their protocol limits |
 | `bun run lint` in `demo` | passed | React, wagmi and Zustand source |
@@ -29,6 +29,8 @@ The current Programmable repository is release `programmable-v4-builder-v0.2.1` 
 | Independent review | not done | local authoring only |
 
 The React demo rendered at the local Vite URL and the supplied desktop screenshot was reviewed. Direct browser automation was unavailable, so no automated click-through or mobile viewport run is claimed.
+
+The 5 invariant properties each ran 128 sequences at depth 48. Foundry made 6,144 handler calls per property with no Foundry-level reverts or discarded calls. The handlers exercised Funding deposits and withdrawals, activation or cancellation, wagered buys and sells, closure, randomness, settlement, claims, finalisation and redemption.
 
 The clean size check recorded 21,978 bytes for `BankrollHook`, 2,636 bytes for `BankrollHookFactory`, 5,316 bytes for `BankrollRouter`, 7,128 bytes for `BankrollRouterFactory`, 16,302 bytes for `BankrollLaunchV1`, 2,182 bytes for `PermanentPositionLocker` and 2,939 bytes for `ChainlinkVrfV25Adapter` at 5,000 optimiser runs.
 
@@ -56,6 +58,10 @@ The lifecycle integration test covers a wagered buy, close, direct-funded reques
 
 A second direction test proves a token-to-ETH exact-input swap can create a ticket from executed native output. Unit tests cover the 1.96x payout, 20% volume cap, 80% utilisation limit and pro-rata redemption formula.
 
+Adversarial tests reject a wrong PoolManager, wrong router, alternate PoolKey, malformed hook data, replayed or stale pending wagers and exact-output wager mode. They also cover stake bounds, bankroll capacity, atomic deadline and slippage failures, both randomness timeout paths, repeated fee claims, repeated ticket claims and repeated settlement.
+
+The stateful suite checks that WETH covers all game liabilities, reserved exposure stays within both caps, bankroll shares remain conserved, terminal states do not return to Active and no ticket pays twice.
+
 ## Implemented launch evidence
 
 Source:
@@ -78,14 +84,14 @@ The npm lock pins OpenZeppelin Contracts 5.5.0, OpenZeppelin Uniswap Hooks 1.1.1
 
 Chainlink's current Ethereum direct-funding documentation lists wrapper `0x02aae1A04f9828517b3007f83f6181900CaD910c` and coordinator `0xD7f86b4b8Cae7D942340FF628F82735b7a20893a`. These addresses have not been runtime-verified or used in a fork test here.
 
-## Work before a prototype application
+## Remaining evidence work
 
 - bind the wager router to an exact deployment record with runtime evidence
 - select and verify the Ethereum PoolManager, PositionManager, UERC20 factory, WETH and VRF wrapper records
-- regenerate the compatibility report and reach `PROTOTYPE_READY`
-- add review target, build info and gate status artifacts
-- run stateful invariants, Slither and mainnet-fork tests
-- bind evidence to a clean public commit
+- extend the invariant handler to Programmable fee claims and native claim backing
+- run Slither and pinned mainnet-fork tests
+- add the remaining failed-launch and hostile dependency tests
+- keep the application package bound to the reviewed public source commit
 - obtain maintainer and independent review
 
 No evidence here proves an audit, acceptance, deployment, source verification, routing approval or product availability.
