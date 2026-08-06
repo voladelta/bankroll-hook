@@ -22,6 +22,7 @@ The current Programmable builder release used here is `programmable-v4-builder-v
 | `MAINNET_RPC_URL=<archive-rpc> npm run test:fork` | 2 tests passed, no failures | Ethereum block 25,690,000 dependency identity, interfaces and full launch lifecycle |
 | `forge lint` | passed with no findings | first-party Solidity |
 | `npm run build` | passed | first-party runtime and init code below their protocol limits |
+| `npm run launch:check` | passed | exact compiler profile, compiled constructor ABIs, source hashes, dependency addresses, target order, internal children and launch graph |
 | `bun run lint` in `demo` | passed | React, wagmi and Zustand source |
 | `bun run build` in `demo` | passed | TypeScript and Vite production build |
 | `uvx --from slither-analyzer slither . --exclude-dependencies` | completed with documented dispositions below | first-party Solidity; Slither 0.11.6 |
@@ -101,6 +102,13 @@ Source:
 Test:
 
 - `test/bankroll/BankrollLaunchV1.t.sol`
+- `script/check-launch-specification.mjs`
+
+Launch artifact:
+
+- `submissions/bankroll-hook/launch.json`
+
+The launch artifact declares `BankrollLaunchV1` as its root, with `BankrollRouterFactory`, `BankrollHookFactory` and `ChainlinkVrfV25Adapter` deployed first. Its constructor locators resolve the exact PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper dependency records plus earlier targets. Its internal-child plans bind the fixed-supply token, mined hook, bound router and permanent position locker, including every address word, the eight launch-time `BankrollConfig` fields, salt derivations and the hook's complete six-permission set. The nine-step atomic plan ends with pool initialization, position mint, custody reconciliation and the optional creator buy; every failure reverts the transaction.
 
 The local launch integration test uses real Uniswap v4 PoolManager, PositionManager and Permit2 test deployments with a local deterministic UERC20 factory. The separate pinned Ethereum fork uses the selected production PoolManager, PositionManager, UERC20Factory and WETH runtimes and launches through them at block 25,690,000.
 

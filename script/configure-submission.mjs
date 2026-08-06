@@ -28,6 +28,7 @@ const tests = [
   "test/bankroll/unit/HookData.t.sol",
   "test/bankroll/unit/ProgrammableFeeMath.t.sol",
   "test/fork/BankrollEthereum.fork.t.sol",
+  "script/check-launch-specification.mjs",
 ];
 const modes = [
   "zeroForOne-exactInput",
@@ -451,7 +452,7 @@ submission.implementation = {
   sourcePaths: sources,
   testPaths: tests,
   compilerBuildInfoPaths: [],
-  specificationPath: "MECHANISM.md",
+  specificationPath: "submissions/bankroll-hook/launch.json",
   testEvidencePath: "submissions/bankroll-hook/EVIDENCE.md",
   dependencyLockPath: "submissions/bankroll-hook/dependency-lock.json",
   gateStatusPath: null,

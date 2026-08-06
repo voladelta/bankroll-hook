@@ -5,13 +5,14 @@
   "description": "A finite fixed-odds bankroll game attached to one Uniswap v4 launch pool.",
   "license": "MIT",
   "scripts": {
-    "build": "forge build && node script/check-first-party-sizes.mjs",
+    "build": "forge build && node script/check-first-party-sizes.mjs && node script/check-launch-specification.mjs",
     "size": "node script/check-first-party-sizes.mjs",
-    "test": "forge test -vvv --no-match-path 'test/fork/**'",
+    "test": "forge test -vvv --no-match-path 'test/fork/**' && node script/check-launch-specification.mjs",
     "test:fork": "forge test --match-path 'test/fork/**' -vvv",
     "test:gas": "forge test --gas-report",
     "fmt": "forge fmt --check",
     "lint": "forge lint",
+    "launch:check": "node script/check-launch-specification.mjs",
     "submission:configure": "node script/configure-submission.mjs"
   },
   "dependencies": {
