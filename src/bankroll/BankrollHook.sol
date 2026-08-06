@@ -91,6 +91,8 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
     mapping(uint64 ticketId => Ticket ticketData) private _tickets;
     mapping(bytes32 poolId => mapping(address currency => mapping(address owner => uint256 amount))) private
         _programmableLiability;
+    mapping(bytes32 poolId => mapping(address currency => mapping(address owner => uint256 remainder))) private
+        _programmableFeeRemainder;
 
     error AlreadyInitialized();
     error BalanceInvariantViolation(uint256 balance, uint256 accounted);
@@ -162,10 +164,17 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
     event GameFinalized(uint256 bankrollAssets, uint256 playerClaimLiability);
     event BankrollRedeemed(address indexed provider, uint256 shares, uint256 assets);
     event ProgrammableFeeAccrued(
-        bytes32 indexed poolId, address indexed owner, address indexed swapSender, uint256 grossQuote, uint256 fee
+        bytes32 indexed poolId,
+        address indexed currency,
+        address indexed owner,
+        address swapSender,
+        uint256 grossQuote,
+        uint256 fee,
+        uint256 remainderBefore,
+        uint256 remainderAfter
     );
     event ProgrammableFeesClaimed(
-        bytes32 indexed poolId, address indexed owner, address indexed recipient, uint256 amount
+        bytes32 indexed poolId, address indexed currency, address indexed owner, address recipient, uint256 amount
     );
 
     constructor(
@@ -278,6 +287,18 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
 
     function programmableLiability() public view returns (uint256) {
         return _programmableLiability[canonicalPoolId][address(0)][PROGRAMMABLE_FEE_OWNER];
+    }
+
+    function programmableFeeRemainder() public view returns (uint256) {
+        return _programmableFeeRemainder[canonicalPoolId][address(0)][PROGRAMMABLE_FEE_OWNER];
+    }
+
+    function programmableFeeRemainderOf(bytes32 poolId, address currency, address owner)
+        external
+        view
+        returns (uint256)
+    {
+        return _programmableFeeRemainder[poolId][currency][owner];
     }
 
     function derivedTicketState(uint64 ticketId) external view returns (TicketStatus) {
@@ -507,7 +528,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
         totalProgrammableFeesAccrued -= amount;
         bytes memory result = poolManager.unlock(abi.encode(CLAIM_UNLOCK_MAGIC, recipient, amount));
         if (result.length != 0) revert UnexpectedUnlockResult();
-        emit ProgrammableFeesClaimed(canonicalPoolId, PROGRAMMABLE_FEE_OWNER, recipient, amount);
+        emit ProgrammableFeesClaimed(canonicalPoolId, address(0), PROGRAMMABLE_FEE_OWNER, recipient, amount);
     }
 
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
@@ -553,10 +574,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
         if (_pendingSpecifiedQuotePoolAmountPlusOne != 0) revert InvalidConfiguration();
 
         uint256 quoteAmount = SignedMath.abs(params.amountSpecified);
-        (uint256 grossQuote, uint256 fee) = exactInput
-            ? (quoteAmount, ProgrammableFeeMath.feeForGross(quoteAmount))
-            : ProgrammableFeeMath.grossUpExactOutput(quoteAmount);
-        _accrueProgrammableFee(sender, grossQuote, fee);
+        (uint256 grossQuote, uint256 fee) = _chargeProgrammableFee(sender, quoteAmount, !exactInput);
         uint256 expectedPoolQuote = exactInput ? quoteAmount - fee : quoteAmount + fee;
         _pendingSpecifiedQuotePoolAmountPlusOne = expectedPoolQuote + 1;
         _pendingGrossQuoteAmount = grossQuote;
@@ -588,9 +606,8 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
             uint256 actual = SignedMath.abs(int256(delta.amount0()));
             if (actual != expected) revert PartialFillUnsupported(expected, actual);
         } else {
-            grossQuote = SignedMath.abs(int256(delta.amount0()));
-            fee = ProgrammableFeeMath.feeForGross(grossQuote);
-            _accrueProgrammableFee(sender, grossQuote, fee);
+            uint256 executedQuote = SignedMath.abs(int256(delta.amount0()));
+            (grossQuote, fee) = _chargeProgrammableFee(sender, executedQuote, !exactInput);
         }
 
         if (hookData.length != 0) {
@@ -635,13 +652,34 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IB
         if (ticketCount == MAX_TICKETS) _closeGame();
     }
 
-    function _accrueProgrammableFee(address sender, uint256 grossQuote, uint256 fee) private {
+    function _chargeProgrammableFee(address sender, uint256 quoteAmount, bool amountIsNet)
+        private
+        returns (uint256 grossQuote, uint256 fee)
+    {
+        uint256 remainderBefore = programmableFeeRemainder();
+        uint256 remainderAfter;
+        if (amountIsNet) {
+            (grossQuote, fee, remainderAfter) = ProgrammableFeeMath.grossUpExactOutput(quoteAmount, remainderBefore);
+        } else {
+            grossQuote = quoteAmount;
+            (fee, remainderAfter) = ProgrammableFeeMath.feeForGross(grossQuote, remainderBefore);
+        }
+        _programmableFeeRemainder[canonicalPoolId][address(0)][PROGRAMMABLE_FEE_OWNER] = remainderAfter;
         if (fee != 0) {
             _programmableLiability[canonicalPoolId][address(0)][PROGRAMMABLE_FEE_OWNER] += fee;
             totalProgrammableFeesAccrued += fee;
             Currency.wrap(address(0)).take(poolManager, address(this), fee, true);
         }
-        emit ProgrammableFeeAccrued(canonicalPoolId, PROGRAMMABLE_FEE_OWNER, sender, grossQuote, fee);
+        emit ProgrammableFeeAccrued(
+            canonicalPoolId,
+            address(0),
+            PROGRAMMABLE_FEE_OWNER,
+            sender,
+            grossQuote,
+            fee,
+            remainderBefore,
+            remainderAfter
+        );
     }
 
     function _closeGame() private {

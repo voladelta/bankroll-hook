@@ -174,6 +174,19 @@ assertExactSet(
   "hook configuration offsets",
 );
 
+const launchCall = launch.extensions.launchCall;
+assert(
+  launchCall.signature ===
+    "launch((string,string,bytes32,bytes32,bytes,uint256,(string,string,string,bytes),(uint128,uint128,uint128,uint64,uint64,uint64,uint64,uint16)))",
+  "launch entrypoint signature",
+);
+assert(launchCall.selector === "0xf133b537", "launch entrypoint selector");
+assert(
+  launchCall.parameterBindings.minimumInitialBuyTokenAmount ===
+    "launch.calldata.parameters.minimumInitialBuyTokenAmount",
+  "initial-buy minimum-output binding",
+);
+
 const vrfTarget = launch.targets.find(({ targetId }) => targetId === "target:vrf-adapter");
 const vrfWords = vrfTarget.constructor.abiEncodedArguments.slice(2).match(/.{64}/g).map((word) => BigInt(`0x${word}`));
 assert(vrfWords[1] === BigInt(launch.extensions.vrfAdapterConfiguration.callbackGasLimit), "VRF callback gas limit");

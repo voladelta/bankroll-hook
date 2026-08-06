@@ -9,9 +9,9 @@ This repository is a local prototype. It is not audited, deployed, accepted by P
 - One native ETH and launched-token PoolKey with zero LP fee and tick spacing 200.
 - A fixed-supply token launcher with deterministic token, hook, router and position-locker addresses.
 - One-sided liquidity held by a permanent locker with no transfer, decrease, rescue or admin path.
-- An optional creator buy in the same launch transaction, charged as an ordinary swap.
+- An optional creator buy in the same launch transaction, charged as an ordinary swap and protected by a creator-selected minimum token output.
 - The six hook permissions represented by address mask `0x30cc`.
-- A 10 bps Programmable fee on executed gross native quote volume in all four swap quadrants.
+- A cumulative 10 bps Programmable fee on executed gross native quote volume in all four swap quadrants, with numerator dust carried by PoolId, currency and immutable owner.
 - An immutable owner-only fee claim to an address chosen for that claim.
 - A fixed Funding, Active, Closed, RandomnessRequested, Seeded or Expired, and Finalized lifecycle.
 - Permissionless WETH bankroll deposits during Funding and pro-rata redemption after the game.

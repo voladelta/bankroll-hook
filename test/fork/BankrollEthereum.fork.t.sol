@@ -120,6 +120,7 @@ contract BankrollEthereumForkTest is Test {
             creatorSalt: creatorSalt,
             hookSalt: hookSalt,
             hookInitCode: initCode,
+            minimumInitialBuyTokenAmount: 0,
             metadata: UERC20Metadata({
                 description: "Pinned Ethereum fork evidence",
                 website: "",

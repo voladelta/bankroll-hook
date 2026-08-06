@@ -28,12 +28,12 @@ contract BankrollHookFactory {
         Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
             | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
     );
-    uint256 public constant APPROVED_HOOK_CREATION_CODE_LENGTH = 23_984;
+    uint256 public constant APPROVED_HOOK_CREATION_CODE_LENGTH = 24_570;
     bytes32 public constant APPROVED_HOOK_CREATION_CODE_HASH =
-        0x03e975dccb4cd6680da9e1d6fd4551f81cd080c8d5c2e77f71a74423385ddfde;
-    uint256 public constant APPROVED_HOOK_RUNTIME_CODE_LENGTH = 22_064;
+        0xa21f6c45a4a59d1d458fdf3b56c091650c0bd84beed1cd4fe0a25b7d2a27cc83;
+    uint256 public constant APPROVED_HOOK_RUNTIME_CODE_LENGTH = 22_650;
     bytes32 public constant APPROVED_HOOK_RUNTIME_CODE_HASH =
-        0x3ca69ffc230c32e40962755fadb865822f0c7e1f8e49121fcd4c05b90ae013a0;
+        0x0db8456b774bdc7bdd868369ca50beb7cc7eae2802390f8935e21eaa05158387;
 
     BankrollRouterFactory public immutable routerFactory;
     bytes32 public immutable approvedHookCreationCodeHash;

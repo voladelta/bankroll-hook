@@ -26,6 +26,22 @@
       "full UERC20 creation, v4 pool initialization, reviewed hook/router deployment and permanently locked position lifecycle"
     ]
   },
+  "currentHeadSmoke": {
+    "observedBlock": 25697510,
+    "observedBlockHash": "0x4d2d5d39db46de19902d8cb4bd9182746640df01b654c2b71ff05e6ffcb69359",
+    "observedParentBlockHash": "0x5dc3d957f39b06b2ff89165aafb021c094a410397f30a59263959375196aae44",
+    "observedStateRoot": "0xee8dbf103b0a9e9a6e4c591cc039fe09e337e7662d0717f4c8c472f639b66c84",
+    "gasPriceWei": "179724274",
+    "result": "passed",
+    "runtimeHashesMatched": 5,
+    "positionManagerPoolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "vrfWrapperTypeAndVersion": "VRFV2PlusWrapper 1.0.0",
+    "vrfNativeQuote": "67081801959395",
+    "vrfCallbackGasLimit": 200000,
+    "vrfNumWords": 1,
+    "vrfWrapperNativeBalance": "23735849938180266047",
+    "limitations": "Point-in-time runtime and call evidence; not an assurance of future quote, funding sufficiency, request availability or monitoring."
+  },
   "dependencies": [
     {
       "id": "v4-poolmanager-ethereum",
@@ -103,6 +119,6 @@
   "limitations": [
     "The PoolManager and PositionManager official registry source refs are not immutable Git commits; runtime identity and verified explorer source are recorded without claiming a reproducible source match.",
     "A passing historical fork is compatibility evidence, not current deployment monitoring or a production availability claim.",
-    "The Chainlink wrapper quoted zero native request price at the pinned historical state; production launch configuration must re-check quote and wrapper funding at deployment time."
+    "The Chainlink wrapper quoted zero native request price at the pinned historical state. The separate current-head smoke observed a nonzero quote and native balance, but production launch configuration must still re-check quote and operational funding at deployment time."
   ]
 }

@@ -85,7 +85,7 @@
       "libraries": [],
       "saltStrategy": "compiler-deterministic-v1",
       "sourceId": "source:primary",
-      "sourceSha256": "sha256:de3b0b163f3d7a7839cc995b6399a7e1704fd31a43ea9136c9d297d06a59ef33",
+      "sourceSha256": "sha256:75f974020670b7c137dc8a9a7bf9183c40836233c376cf533039c0282d1cc74d",
       "sourceUnitName": "src/bankroll/BankrollLaunchV1.sol",
       "targetId": "target:bankroll-launch"
     },
@@ -111,7 +111,7 @@
       "libraries": [],
       "saltStrategy": "compiler-deterministic-v1",
       "sourceId": "source:primary",
-      "sourceSha256": "sha256:567131bdc5ba5ff9ff381b3b647826ceac87d92484b4e0685cd14932fa63950b",
+      "sourceSha256": "sha256:e34faa5716b8d054417395396aceb15fb3cbd92ea92b65c4e601826c49187245",
       "sourceUnitName": "src/bankroll/BankrollHookFactory.sol",
       "targetId": "target:hook-factory"
     },
@@ -130,7 +130,7 @@
       "libraries": [],
       "saltStrategy": "compiler-deterministic-v1",
       "sourceId": "source:primary",
-      "sourceSha256": "sha256:567131bdc5ba5ff9ff381b3b647826ceac87d92484b4e0685cd14932fa63950b",
+      "sourceSha256": "sha256:e34faa5716b8d054417395396aceb15fb3cbd92ea92b65c4e601826c49187245",
       "sourceUnitName": "src/bankroll/BankrollHookFactory.sol",
       "targetId": "target:router-factory"
     },
@@ -156,7 +156,7 @@
       "libraries": [],
       "saltStrategy": "compiler-deterministic-v1",
       "sourceId": "source:primary",
-      "sourceSha256": "sha256:cdb8145ff9633879ec831ccb0acfe8ceeba070c954b03846244dff206bd04deb",
+      "sourceSha256": "sha256:256f2dba6cd755846a6705507931d814315c2fbbba148b21957a98f9493e4a62",
       "sourceUnitName": "src/bankroll/randomness/ChainlinkVrfV25Adapter.sol",
       "targetId": "target:vrf-adapter"
     }
@@ -564,7 +564,7 @@
       "failurePolicy": "Any child deployment, bytecode, constructor, token, pool, position, settlement or optional initial-buy mismatch reverts the single launch transaction.",
       "steps": [
         {
-          "action": "Resolve the launch-session wallet, game configuration, metadata, salts and optional native initial-buy value.",
+        "action": "Resolve the launch-session wallet, game configuration, metadata, salts, native initial-buy value and creator-selected minimum token output.",
           "step": 1
         },
         {
@@ -596,7 +596,7 @@
           "step": 8
         },
         {
-          "action": "If native value is supplied, execute the creator initial buy and record the launch provenance hash.",
+          "action": "If native value is supplied, execute the creator initial buy, enforce minimumInitialBuyTokenAmount and record the launch provenance hash.",
           "step": 9
         }
       ],
@@ -718,7 +718,7 @@
         "deployerTargetId": "target:hook-factory",
         "saltSource": "launch.calldata.parameters.hookSalt",
         "sourceId": "source:primary",
-        "sourceSha256": "sha256:355860b4f9babea112ec17d53bd13b22a6063c8a4bc6280ee75d459fa278dee8",
+        "sourceSha256": "sha256:e4377902c913cf5c46fbe2f7cfcb3c23bb339eb9386ed809dcac017fcd4a48b3",
         "sourceUnitName": "src/bankroll/BankrollHook.sol"
       },
       {
@@ -796,12 +796,28 @@
         "contractName": "PermanentPositionLocker",
         "declaredHookPermissions": null,
         "deployerTargetId": "target:bankroll-launch",
-        "saltSource": "keccak256(abi.encode(BANKROLL_POSITION_LOCKER_V1, child:launched-token, launch-session-wallet))",
+        "saltSource": "keccak256(abi.encode(BANKROLL_POSITION_V1, child:launched-token, launch-session-wallet))",
         "sourceId": "source:primary",
         "sourceSha256": "sha256:0ad66b7c9a69539690ac6ac07c61c154d12acc1f69b6fe4a51e29efa7cb5f948",
         "sourceUnitName": "src/bankroll/PermanentPositionLocker.sol"
       }
     ],
+    "launchCall": {
+      "entrypoint": "BankrollLaunchV1.launch",
+      "selector": "0xf133b537",
+      "signature": "launch((string,string,bytes32,bytes32,bytes,uint256,(string,string,string,bytes),(uint128,uint128,uint128,uint64,uint64,uint64,uint64,uint16)))",
+      "valueSource": "launch-session native initial-buy value",
+      "parameterBindings": {
+        "name": "launch.calldata.parameters.name",
+        "symbol": "launch.calldata.parameters.symbol",
+        "creatorSalt": "launch.calldata.parameters.creatorSalt",
+        "hookSalt": "launch.calldata.parameters.hookSalt",
+        "hookInitCode": "exact BankrollHook creation code plus bound constructor arguments",
+        "minimumInitialBuyTokenAmount": "launch.calldata.parameters.minimumInitialBuyTokenAmount",
+        "metadata": "launch.calldata.parameters.metadata",
+        "game": "launch.calldata.parameters.game"
+      }
+    },
     "proposalStatus": "architecture-review-required",
     "releaseDeploymentOrder": [
       "target:router-factory",

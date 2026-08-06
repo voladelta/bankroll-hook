@@ -23,8 +23,10 @@ const sources = [
 const tests = [
   "test/bankroll/BankrollLaunchV1.t.sol",
   "test/bankroll/BankrollLifecycle.t.sol",
+  "test/bankroll/helpers/MockVrfWrapper.sol",
   "test/bankroll/invariant/BankrollSolvency.invariant.t.sol",
   "test/bankroll/unit/BankrollMath.t.sol",
+  "test/bankroll/unit/ChainlinkVrfV25Adapter.t.sol",
   "test/bankroll/unit/HookData.t.sol",
   "test/bankroll/unit/ProgrammableFeeMath.t.sol",
   "test/fork/BankrollEthereum.fork.t.sol",
@@ -109,10 +111,10 @@ submission.launchLifecycle.liquidityFormation = lifecycle(
   "BankrollLiquidityConfigured.",
 );
 submission.launchLifecycle.initialTransaction = lifecycle(
-  "The creator may execute one declared ETH buy through BankrollLaunchV1 with empty hook data.",
+  "The creator may execute one declared ETH buy through BankrollLaunchV1 with empty hook data and a minimum token output.",
   "The ordinary swap pays the 10 bps fee and creates no ticket.",
   "PoolManager settles the swap; the hook retains only the fee claim.",
-  "Any swap failure must revert the complete launch.",
+  "Any swap or minimum-output failure must revert the complete launch.",
   "BankrollInitialBuy and ProgrammableFeeAccrued.",
 );
 submission.launchLifecycle.trading = lifecycle(
@@ -232,16 +234,22 @@ hook.hookData = {
   callbackSenderRule: "pool-manager-callback-and-exact-router-binding",
   validation: "Hook data carries no user identity. Check the immutable router sender, exact-input mode, version, length, previously staged pending id, same block, Active state and deadline.",
 };
-const feePart = (basis, formula) => ({ currency: "currency0", basis, formula, rounding: "down", maximumHundredthsOfBip: 1000 });
+const feePart = (basis, formula) => ({
+  currency: "currency0",
+  basis,
+  formula,
+  rounding: "down",
+  maximumHundredthsOfBip: 1000,
+});
 hook.feeMechanism = {
   used: true,
   classification: "hook-owned-fee",
   chargedCurrency: "Native ETH currency0 in all four quadrants.",
   swapQuadrants: {
-    zeroForOneExactInput: feePart("gross-input", "beforeSwap removes floor(gross*1000/1000000) from AMM input"),
-    zeroForOneExactOutput: feePart("gross-input", "afterSwap charges the executed native input"),
-    oneForZeroExactInput: feePart("gross-output", "afterSwap deducts the fee from executed native output"),
-    oneForZeroExactOutput: feePart("gross-output", "beforeSwap gross-ups so gross minus fee equals requested net output"),
+    zeroForOneExactInput: feePart("gross-input", "beforeSwap charges floor((gross*1000+carriedRemainder)/1000000)"),
+    zeroForOneExactOutput: feePart("gross-input", "afterSwap gross-ups executed net native input using the carried remainder"),
+    oneForZeroExactInput: feePart("gross-output", "afterSwap deducts floor((gross*1000+carriedRemainder)/1000000)"),
+    oneForZeroExactOutput: feePart("gross-output", "beforeSwap gross-ups so gross minus cumulative fee equals requested net output"),
   },
   maximumHundredthsOfBip: 1000,
   collectionPath: "quadrant-dependent-swap-return-delta",
@@ -277,8 +285,8 @@ const zeroDelta = {
 };
 const positiveDelta = (currency) => ({
   mode: "positive-only",
-  formula: "floor(executed gross native quote * 1000 / 1000000)",
-  minimum: "zero when the rounded fee is zero",
+  formula: "floor((executed gross native quote * 1000 + carried remainder) / 1000000)",
+  minimum: "zero for an individual swap only when the carried cumulative numerator has not reached one quote unit",
   maximum: "strictly less than the executed gross native quote",
   minimumSign: "zero",
   maximumSign: "positive",
@@ -295,7 +303,7 @@ const quadrant = (specifiedCurrency, unspecifiedCurrency, amountSign, beforeFee)
   residualAmmEquation: "amountSpecified-plus-specifiedDelta",
   finalCallerDeltaEquation: "pool-manager-swap-delta-minus-hook-delta",
   specifiedDeltaCanConsumeEntireAmount: false,
-  rounding: "Down per swap.",
+  rounding: "Carry the lifetime numerator remainder by canonical PoolId, native currency and immutable owner.",
   zeroAmmLeg: "forbidden",
   partialFillRule: beforeFee ? "afterSwap checks the expected specified native amount and reverts a mismatch." : "afterSwap uses the actual executed native BalanceDelta.",
   slippageInvariant: "The external router checks the final caller delta after the hook return delta.",
@@ -318,8 +326,10 @@ hook.postReturnDeltaAccounting.afterSwap.negativeMeaning = "hook-debt-caller-cre
 hook.postReturnDeltaAccounting.afterSwap.backingSource = "Equal native ERC-6909 claims minted before return.";
 hook.postReturnDeltaAccounting.afterSwap.callerDeltaEquation = "protocol-delta-minus-hook-delta";
 hook.postReturnDeltaAccounting.afterSwap.componentPolicies = { unspecified: positiveDelta("unspecified"), currency0: null, currency1: null };
-hook.postReturnDeltaAccounting.afterSwap.bounds = "Zero or floor(executed gross native quote * 1000 / 1000000), checked to int128.";
-hook.postReturnDeltaAccounting.afterSwap.rounding = "Down per swap.";
+hook.postReturnDeltaAccounting.afterSwap.bounds =
+  "Zero or floor((executed gross native quote * 1000 + carried remainder) / 1000000), checked to int128.";
+hook.postReturnDeltaAccounting.afterSwap.rounding =
+  "Carry the lifetime numerator remainder by canonical PoolId, native currency and immutable owner.";
 hook.postReturnDeltaAccounting.afterSwap.slippageOrMinimums = "The router checks the final caller delta.";
 hook.postReturnDeltaAccounting.afterSwap.failureRule = "Cast, claim mint or ledger failure reverts the swap.";
 hook.postReturnDeltaAccounting.afterSwap.executionEvent = "ProgrammableFeeAccrued";
@@ -340,7 +350,7 @@ hook.erc6909Claims = {
   crossPoolNetting: false,
   transferPolicy: "No claim transfer function is exposed.",
   redemption: "Immutable owner only, to its selected destination.",
-  roundingDust: "Per-swap floor remains with the trader or pool path and creates no liability.",
+  roundingDust: "The numerator remainder is carried for the canonical pool lifetime and is not cleared by claims.",
   aggregateSolvencyEquation: "native claim balance >= programmable liability",
 };
 hook.nestedActions = {
@@ -399,7 +409,7 @@ submission.capabilities.externalLiquidity = {
 submission.integration.swapModes = modes;
 submission.integration.routerGeneration = null;
 submission.integration.partialFills = "Ordinary unspecified-quote modes charge executed deltas; wager partial fills and specified-quote mismatches revert.";
-submission.integration.slippage = "Ordinary routers enforce their settings; the wager router enforces minimum output and a price limit.";
+submission.integration.slippage = "Ordinary routers enforce their settings; the wager router enforces minimum output and a price limit; the atomic launcher binds minimumInitialBuyTokenAmount.";
 submission.integration.deadline = "The wager router rejects calls after the user-supplied timestamp.";
 submission.integration.permit2 = "Not used by the wager router; token input uses a direct ERC-20 allowance.";
 submission.integration.stateReads = "Read game, ticket, liability and bankroll state from the hook and randomness status from the adapter.";
@@ -484,6 +494,7 @@ submission.disclosures = [
   "Selected Ethereum dependency runtimes are pinned in submissions/bankroll-hook/dependency-evidence.json; the official PoolManager and PositionManager source refs remain non-immutable in the current registry.",
   "A wager has equal win and loss probability, pays 1.96x gross on a win and has a 2% expected house edge.",
   "The project fee is zero; the mandatory 10 bps fee belongs only to the immutable Programmable owner.",
+  "The custom hook accepts sub-1,000-unit native quote swaps and carries their fee numerator so the reviewer-requested 1,000 x 999 wei regression accrues 999 wei. This differs from the Builder 1.5 standard profile, which rejects positive gross quote amounts below 1,000 units, and remains an explicit architecture-review item.",
 ];
 submission.noHookArchitecture = null;
 submission.unresolved = [];

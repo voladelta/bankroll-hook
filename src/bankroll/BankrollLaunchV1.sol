@@ -74,9 +74,9 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     int24 public constant TICK_SPACING = 200;
     uint24 public constant LP_FEE_PIPS = 0;
     bytes32 public constant REVIEWED_HOOK_CREATION_CODE_HASH =
-        0x03e975dccb4cd6680da9e1d6fd4551f81cd080c8d5c2e77f71a74423385ddfde;
+        0xa21f6c45a4a59d1d458fdf3b56c091650c0bd84beed1cd4fe0a25b7d2a27cc83;
     bytes32 public constant REVIEWED_HOOK_RUNTIME_CODE_HASH =
-        0x3ca69ffc230c32e40962755fadb865822f0c7e1f8e49121fcd4c05b90ae013a0;
+        0x0db8456b774bdc7bdd868369ca50beb7cc7eae2802390f8935e21eaa05158387;
     bytes32 public constant REVIEWED_ROUTER_CREATION_CODE_HASH =
         0xe1ce945bbb95bd1dcf9ffc7da4c1585009416599fdb21340768d4020c8e9556d;
     bytes32 public constant REVIEWED_ROUTER_RUNTIME_CODE_HASH =
@@ -102,6 +102,7 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         bytes32 creatorSalt;
         bytes32 hookSalt;
         bytes hookInitCode;
+        uint256 minimumInitialBuyTokenAmount;
         UERC20Metadata metadata;
         BankrollConfig game;
     }
@@ -137,6 +138,8 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidHookConfiguration(bytes32 actual, bytes32 expected);
     error InvalidLaunchBytecodeHash(bytes32 actual, bytes32 expected);
     error InvalidInitialBuyDelta(int128 nativeDelta, int128 tokenDelta);
+    error InvalidInitialBuyMinimum(uint256 minimumTokenAmount);
+    error InitialBuyMinimumOutputNotMet(uint256 actual, uint256 minimum);
     error InvalidInitialBuyResult(uint256 tokenAmount, uint256 nativeBalance);
     error InvalidInitialBuySettlement(uint256 actual, uint256 expected);
     error InvalidInitialTick(int24 actual, int24 expected);
@@ -309,7 +312,8 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         (result.tokenLiquidityAmount, result.lockedTokenDust) =
             _placeOneSidedLiquidity(key, address(result.positionLocker));
         if (msg.value != 0) {
-            result.initialBuyTokenAmount = _executeInitialBuy(key, msg.sender, msg.value);
+            result.initialBuyTokenAmount =
+                _executeInitialBuy(key, msg.sender, msg.value, parameters.minimumInitialBuyTokenAmount);
         }
         result.launchHash = _recordLaunch(parameters, result, msg.sender);
     }
@@ -380,7 +384,7 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         }
     }
 
-    function _executeInitialBuy(PoolKey memory key, address recipient, uint256 nativeAmount)
+    function _executeInitialBuy(PoolKey memory key, address recipient, uint256 nativeAmount, uint256 minimumTokenAmount)
         private
         returns (uint256 tokenAmount)
     {
@@ -388,6 +392,9 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
             abi.encode(InitialBuyCallbackData({ key: key, recipient: recipient, nativeAmount: nativeAmount }))
         );
         tokenAmount = abi.decode(result, (uint256));
+        if (tokenAmount < minimumTokenAmount) {
+            revert InitialBuyMinimumOutputNotMet(tokenAmount, minimumTokenAmount);
+        }
         if (tokenAmount == 0 || address(this).balance != 0) {
             revert InvalidInitialBuyResult(tokenAmount, address(this).balance);
         }
@@ -467,6 +474,7 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
                 result.lockedTokenDust,
                 result.initialBuyNativeAmount,
                 result.initialBuyTokenAmount,
+                parameters.minimumInitialBuyTokenAmount,
                 INITIAL_TICK,
                 TICK_SPACING,
                 LP_FEE_PIPS,
@@ -552,6 +560,9 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         }
         if (msg.value != 0 && msg.value < MIN_NONZERO_INITIAL_BUY) {
             revert InitialBuyBelowMinimum(msg.value, MIN_NONZERO_INITIAL_BUY);
+        }
+        if (msg.value == 0 && parameters.minimumInitialBuyTokenAmount != 0) {
+            revert InvalidInitialBuyMinimum(parameters.minimumInitialBuyTokenAmount);
         }
     }
 

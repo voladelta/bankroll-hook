@@ -12,7 +12,7 @@ The canonical pool uses native ETH as currency0, the launched token as currency1
 
 The launcher creates a fixed one-billion-token supply through an external UERC20 factory. It deploys the mined hook and its narrow router, initializes the pool and puts the supply into a one-sided position. A dedicated locker owns the position NFT permanently. It cannot transfer or reduce the position, rescue assets or change its fee recipient.
 
-The creator may include an initial ETH buy in the launch transaction. It uses empty hook data, so it pays the Programmable fee but does not create a wager. A failure in token creation, hook deployment, pool initialization, liquidity formation or the initial buy reverts the complete launch.
+The creator may include an initial ETH buy in the launch transaction and supplies the minimum acceptable token output. It uses empty hook data, so it pays the Programmable fee but does not create a wager. A failure in token creation, hook deployment, pool initialization, liquidity formation, the minimum-output check or the initial buy reverts the complete launch.
 
 The hook charges the mandatory 10 bps Programmable fee on executed gross native quote volume. It has no project fee. It charges specified-quote swaps in `beforeSwap` and unspecified-quote swaps in `afterSwap`:
 
@@ -23,7 +23,9 @@ The hook charges the mandatory 10 bps Programmable fee on executed gross native 
 | Token to ETH, exact input | `afterSwap` |
 | Token to ETH, exact output | `beforeSwap` |
 
-The hook stores the fee as native PoolManager ERC-6909 claims. The liability key is the canonical PoolId, native currency and immutable Programmable owner. Only that owner can claim. It may choose the destination for each claim.
+Each fee calculation adds the prior numerator remainder before division. The hook carries the new remainder by canonical PoolId, native currency and immutable Programmable owner, so splitting successful micro-swaps cannot avoid the lifetime 10 bps entitlement. Claims do not clear that remainder.
+
+The hook stores the whole-unit fee as native PoolManager ERC-6909 claims. The liability uses the same PoolId, currency and owner scope. Only that owner can claim. It may choose the destination for each claim.
 
 ## Funding and exposure
 

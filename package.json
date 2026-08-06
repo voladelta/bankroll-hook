@@ -13,7 +13,7 @@
     "fmt": "forge fmt --check",
     "lint": "forge lint",
     "launch:check": "node script/check-launch-specification.mjs",
-    "submission:configure": "node script/configure-submission.mjs"
+    "submission:configure": "node script/configure-submission.mjs && node script/generate-v15-projection.mjs"
   },
   "dependencies": {
     "@chainlink/contracts": "1.5.0",

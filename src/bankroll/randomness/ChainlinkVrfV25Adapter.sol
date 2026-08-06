@@ -25,6 +25,8 @@ contract ChainlinkVrfV25Adapter is IRandomnessAdapter, VRFV2PlusWrapperConsumerB
     mapping(uint256 requestId => bytes32 requestKey) public requestKeyById;
 
     error ExactPaymentRequired(uint256 expected, uint256 actual);
+    error DuplicateRequestId(uint256 requestId);
+    error DuplicateRequestKey(bytes32 requestKey);
     error InvalidConfiguration();
     error InvalidFulfilment(uint256 requestId);
     error RandomnessNotReady(bytes32 requestKey);
@@ -58,10 +60,12 @@ contract ChainlinkVrfV25Adapter is IRandomnessAdapter, VRFV2PlusWrapperConsumerB
         (uint256 requestId, uint256 charged) =
             requestRandomnessPayInNative(callbackGasLimit, requestConfirmations, 1, extraArgs);
         if (charged != fee) revert ExactPaymentRequired(fee, charged);
+        if (requestKeyById[requestId] != bytes32(0)) revert DuplicateRequestId(requestId);
 
         requestKey = keccak256(
             abi.encode("BANKROLL_VRF_REQUEST_V1", block.chainid, address(this), msg.sender, context, requestId)
         );
+        if (_requests[requestKey].consumer != address(0)) revert DuplicateRequestKey(requestKey);
         _requests[requestKey] =
             Request({ consumer: msg.sender, context: context, word: bytes32(0), fulfilled: false, consumed: false });
         requestKeyById[requestId] = requestKey;

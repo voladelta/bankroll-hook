@@ -10,12 +10,16 @@ contract ProgrammableFeeMathHarness {
         return ProgrammableFeeMath.split(selected);
     }
 
-    function feeForGross(uint256 gross) external pure returns (uint256) {
-        return ProgrammableFeeMath.feeForGross(gross);
+    function feeForGross(uint256 gross, uint256 remainder) external pure returns (uint256 fee, uint256 nextRemainder) {
+        return ProgrammableFeeMath.feeForGross(gross, remainder);
     }
 
-    function grossUp(uint256 net) external pure returns (uint256 gross, uint256 fee) {
-        return ProgrammableFeeMath.grossUpExactOutput(net);
+    function grossUp(uint256 net, uint256 remainder)
+        external
+        pure
+        returns (uint256 gross, uint256 fee, uint256 nextRemainder)
+    {
+        return ProgrammableFeeMath.grossUpExactOutput(net, remainder);
     }
 }
 
@@ -38,22 +42,60 @@ contract ProgrammableFeeMathTest is Test {
         assertEq(project, 29_000);
     }
 
-    function testGrossFeeRoundsDown() public view {
-        assertEq(math.feeForGross(999), 0);
-        assertEq(math.feeForGross(1000), 1);
-        assertEq(math.feeForGross(1 ether), 0.001 ether);
+    function testGrossFeeCarriesNumeratorRemainder() public view {
+        (uint256 fee, uint256 remainder) = math.feeForGross(999, 0);
+        assertEq(fee, 0);
+        assertEq(remainder, 999_000);
+        (fee, remainder) = math.feeForGross(999, remainder);
+        assertEq(fee, 1);
+        assertEq(remainder, 998_000);
+        (fee, remainder) = math.feeForGross(1 ether, 0);
+        assertEq(fee, 0.001 ether);
+        assertEq(remainder, 0);
     }
 
     function testExactOutputGrossUp() public view {
-        (uint256 gross, uint256 fee) = math.grossUp(1 ether);
+        (uint256 gross, uint256 fee, uint256 remainder) = math.grossUp(1 ether, 0);
         assertEq(gross - fee, 1 ether);
-        assertEq(fee, math.feeForGross(gross));
+        (uint256 expectedFee, uint256 expectedRemainder) = math.feeForGross(gross, 0);
+        assertEq(fee, expectedFee);
+        assertEq(remainder, expectedRemainder);
     }
 
     function testFuzzGrossUpConserves(uint128 rawNet) public view {
         uint256 net = bound(uint256(rawNet), 1, type(uint128).max);
-        (uint256 gross, uint256 fee) = math.grossUp(net);
+        uint256 carried = uint256(keccak256(abi.encode(rawNet))) % 1_000_000;
+        (uint256 gross, uint256 fee, uint256 remainder) = math.grossUp(net, carried);
         assertEq(gross - fee, net);
-        assertEq(fee, math.feeForGross(gross));
+        (uint256 expectedFee, uint256 expectedRemainder) = math.feeForGross(gross, carried);
+        assertEq(fee, expectedFee);
+        assertEq(remainder, expectedRemainder);
+    }
+
+    function testOneThousandSplitGrossSwapsMatchCumulativeIdentity() public view {
+        uint256 totalFee;
+        uint256 remainder;
+        for (uint256 index; index < 1000; ++index) {
+            (uint256 fee, uint256 nextRemainder) = math.feeForGross(999, remainder);
+            totalFee += fee;
+            remainder = nextRemainder;
+        }
+        assertEq(totalFee, 999);
+        assertEq(remainder, 0);
+    }
+
+    function testOneThousandSplitFeeOnTopSwapsMatchCumulativeIdentity() public view {
+        uint256 totalGross;
+        uint256 totalFee;
+        uint256 remainder;
+        for (uint256 index; index < 1000; ++index) {
+            (uint256 gross, uint256 fee, uint256 nextRemainder) = math.grossUp(999, remainder);
+            totalGross += gross;
+            totalFee += fee;
+            remainder = nextRemainder;
+        }
+        assertEq(totalGross - totalFee, 999_000);
+        assertEq(totalFee, totalGross * 1000 / 1_000_000);
+        assertEq(remainder, totalGross * 1000 % 1_000_000);
     }
 }

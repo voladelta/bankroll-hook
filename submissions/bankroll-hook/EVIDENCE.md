@@ -1,6 +1,6 @@
 # Bankroll Hook evidence
 
-Evidence date: 6 August 2026
+Evidence date: 7 August 2026
 
 Evidence state: candidate working-tree evidence; the public application package must be regenerated after this exact source is committed and pushed
 
@@ -8,18 +8,21 @@ Evidence state: candidate working-tree evidence; the public application package 
 
 The implementation uses one custom hook because wager admission and the mandatory fee both need atomic PoolManager execution. The hook integrates the 10 bps Programmable fee directly.
 
-The regenerated local compatibility report says `PROTOTYPE_READY` with no deterministic blockers. The hook mask is `0x30cc`. The report retains warnings for return-delta specialist review, the novel game architecture and deterministic Solidity import closure.
+The canonical projection is pinned to Programmable Builder release `v0.4.0`, commit `5b47504299c5dbe0ab694be8d163e80d352c8166`, tree `69e01dfcb883e60390fc8869271b6aff03fc67bf`, submission standard `1.5.0` and fee policy `1.1.0`. Its deterministic report has one explicit blocker: the standard profile requires a positive gross quote below 1,000 units to revert, while the immutable review request requires 999-wei swaps to remain successful and accrue cumulatively. The source follows the review request. `submission.v1.5.json` and `compatibility-report.v1.5.json` disclose that exception and do not claim standard-profile conformance.
+
+The production intake still validates the legacy `1.3.0` projection. Its regenerated compatibility report says `PROTOTYPE_READY` with no deterministic blockers. Both reports bind hook mask `0x30cc` and retain warnings for return-delta specialist review, the novel game architecture and deterministic Solidity import closure. The legacy projection is packaging compatibility only; the canonical design record is 1.5.
 
 The Builder package check passed proposal structure. A new application package must be generated only after this candidate becomes a clean public source commit; that package must record the exact source commit, source tree, submission hash and review-target hash. The application stage remains proposal.
 
-The current Programmable builder release used here is `programmable-v4-builder-v0.2.1`. Its aggregate official Ethereum launchpad profile is marked `reference-conflicted-runtime-unverified`. This submission therefore binds its selected dependencies independently at a pinned historical block and makes no production deployment or availability claim.
+The Builder 1.5 official Ethereum records still leave PoolManager and PositionManager source refs unresolved and require runtime verification before execution. This submission therefore binds its selected dependencies independently at a pinned historical block, adds a current-head runtime smoke and makes no production deployment or availability claim.
 
 ## Local results
 
 | Check | Result | Scope |
 | --- | --- | --- |
-| `npm test` | 47 tests passed, no failures | unit, 512-run fuzz, adversarial lifecycle, launch integration and stateful invariants; fork tests excluded explicitly |
+| `npm test` | 76 tests passed, no failures | unit, 512-run fuzz, adversarial lifecycle, launch integration, VRF boundaries and stateful invariants; fork tests excluded explicitly |
 | `MAINNET_RPC_URL=<archive-rpc> npm run test:fork` | 2 tests passed, no failures | Ethereum block 25,690,000 dependency identity, interfaces and full launch lifecycle |
+| Current-head Ethereum smoke | passed at block 25,697,510 | five runtime hashes, PositionManager binding, VRF version, nonzero quote and wrapper native balance |
 | `forge lint` | passed with no findings | first-party Solidity |
 | `npm run build` | passed | first-party runtime and init code below their protocol limits |
 | `npm run launch:check` | passed | exact compiler profile, compiled constructor ABIs, source hashes, dependency addresses, target order, internal children and launch graph |
@@ -33,7 +36,7 @@ The React demo rendered at the local Vite URL and the supplied desktop screensho
 
 The 6 invariant properties each ran 128 sequences at depth 48. Foundry made 6,144 handler calls per property with no Foundry-level reverts or discarded calls. The handlers exercised Funding deposits and withdrawals, activation or cancellation, wagered buys and sells, closure, randomness, settlement, claims, Programmable fee claims, finalisation and redemption. The native claim-backing property checks that the hook's PoolManager native balance equals its Programmable fee liability after every action.
 
-The clean size check records 22,064 bytes for `BankrollHook`, 5,563 bytes for `BankrollHookFactory`, 5,316 bytes for `BankrollRouter`, 8,597 bytes for `BankrollRouterFactory`, 18,384 bytes for `BankrollLaunchV1`, 2,182 bytes for `PermanentPositionLocker` and 2,939 bytes for `ChainlinkVrfV25Adapter` at 5,000 optimiser runs. All first-party deployables remain below EIP-170.
+The clean size check records 22,650 bytes for `BankrollHook`, 5,563 bytes for `BankrollHookFactory`, 5,316 bytes for `BankrollRouter`, 8,597 bytes for `BankrollRouterFactory`, 18,529 bytes for `BankrollLaunchV1`, 2,182 bytes for `PermanentPositionLocker` and 3,082 bytes for `ChainlinkVrfV25Adapter` at 5,000 optimiser runs. All first-party deployables remain below EIP-170.
 
 Foundry's unfiltered `--sizes` report also includes the pinned Uniswap `PositionDescriptor`, which is 29,387 bytes in this build profile and makes that unfiltered command return a dependency size error. The project build uses a first-party size gate so it does not hide or confuse that upstream result with this project's deployables.
 
@@ -64,9 +67,9 @@ Tests:
 - `test/bankroll/unit/ProgrammableFeeMath.t.sol`
 - `test/bankroll/BankrollLifecycle.t.sol`
 
-The integration test executes ETH-to-token and token-to-ETH swaps in exact-input and exact-output modes. Each case increases the native fee liability. Another test proves a non-owner cannot claim and the immutable owner can claim the full amount to a selected recipient.
+The integration tests reconcile the exact fee event, gross quote, fee and before/after remainder in ETH-to-token and token-to-ETH exact-input and exact-output modes. Separate regressions execute 1,000 successful 999-wei swaps in both gross and fee-on-top paths and prove the cumulative identities produce 999 wei of fee rather than zero. Claims preserve the carried remainder; recipient failure rolls back the whole claim.
 
-The policy is 10 bps effective, 10 bps platform and zero project. It excludes LP fees. The liability key is canonical PoolId, native currency and owner. There is no cross-pool netting.
+The policy is 10 bps effective, 10 bps platform and zero project. It excludes LP fees. Both the liability and carried numerator remainder are keyed by canonical PoolId, native currency and owner. Donation does not accrue a fee, a specified-quote partial fill rolls back the fee and remainder, and an alternate pool cannot share either state.
 
 ## Implemented game evidence
 
@@ -74,7 +77,9 @@ The lifecycle integration test covers a wagered buy, close, direct-funded reques
 
 A second direction test proves a token-to-ETH exact-input swap can create a ticket from executed native output. Unit tests cover the 1.96x payout, 20% volume cap, 80% utilisation limit and pro-rata redemption formula.
 
-Adversarial tests reject a wrong PoolManager, wrong router, alternate PoolKey, malformed hook data, replayed or stale pending wagers and exact-output wager mode. They also cover stake bounds, bankroll capacity, atomic deadline and slippage failures, both randomness timeout paths, repeated fee claims, repeated ticket claims and repeated settlement.
+Adversarial tests reject a wrong PoolManager, wrong router, alternate PoolKey, malformed hook data, replayed or stale pending wagers and exact-output wager mode. They also cover stake bounds, insufficient Funding cancellation, zero-ticket finalisation, the 64-ticket capacity and four bounded settlement batches, atomic deadline, price-limit, partial-fill, output-recipient and transfer failures, both randomness timeout paths, repeated fee claims, repeated ticket claims and repeated settlement.
+
+The dedicated adapter tests bind its quote to exact native payment, reject reused wrapper request IDs before request-key overwrite, authenticate wrapper-only fulfilment, reject unknown and duplicate fulfilment and enforce consumer-only one-shot consumption. Hook-level tests enforce the caller's maximum and exact request fee.
 
 The stateful suite checks that WETH covers all game liabilities, reserved exposure stays within both caps, bankroll shares remain conserved, terminal states do not return to Active, no ticket pays twice and native PoolManager claims cover every Programmable fee liability.
 
@@ -86,7 +91,7 @@ The approved values for the reviewed compiler input are:
 
 | Contract | Creation code | Runtime code |
 | --- | --- | --- |
-| `BankrollHook` | 23,984 bytes; `0x03e975dccb4cd6680da9e1d6fd4551f81cd080c8d5c2e77f71a74423385ddfde` | 22,064 bytes; `0x3ca69ffc230c32e40962755fadb865822f0c7e1f8e49121fcd4c05b90ae013a0` |
+| `BankrollHook` | 24,570 bytes; `0xa21f6c45a4a59d1d458fdf3b56c091650c0bd84beed1cd4fe0a25b7d2a27cc83` | 22,650 bytes; `0x0db8456b774bdc7bdd868369ca50beb7cc7eae2802390f8935e21eaa05158387` |
 | `BankrollRouter` | 5,949 bytes; `0xe1ce945bbb95bd1dcf9ffc7da4c1585009416599fdb21340768d4020c8e9556d` | 5,316 bytes; `0xef3209b3d091029d17ff449fd871ce3fa8f1dd3aae43f22b3cae1148879e89bf` |
 
 The runtime normaliser clears only the compiler-recorded immutable slots. The raw deployed runtime hash is also stored. `BankrollLaunchV1` independently binds all four reviewed hashes, rejects a factory that reports different values, returns the raw hook and router hashes, includes them in the launch hash and emits `BankrollLaunchProvenance`. Mismatch tests cover modified hook creation bytes, modified constructor arguments, modified deployed runtime bytes and an unreviewed factory hash.
@@ -108,11 +113,11 @@ Launch artifact:
 
 - `submissions/bankroll-hook/launch.json`
 
-The launch artifact declares `BankrollLaunchV1` as its root, with `BankrollRouterFactory`, `BankrollHookFactory` and `ChainlinkVrfV25Adapter` deployed first. Its constructor locators resolve the exact PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper dependency records plus earlier targets. Its internal-child plans bind the fixed-supply token, mined hook, bound router and permanent position locker, including every address word, the eight launch-time `BankrollConfig` fields, salt derivations and the hook's complete six-permission set. The nine-step atomic plan ends with pool initialization, position mint, custody reconciliation and the optional creator buy; every failure reverts the transaction.
+The launch artifact declares `BankrollLaunchV1` as its root, with `BankrollRouterFactory`, `BankrollHookFactory` and `ChainlinkVrfV25Adapter` deployed first. Its constructor locators resolve the exact PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper dependency records plus earlier targets. Its internal-child plans bind the fixed-supply token, mined hook, bound router and permanent position locker, including every address word, the eight launch-time `BankrollConfig` fields, salt derivations and the hook's complete six-permission set. The launch-call record binds the exact ABI signature, selector and initial-buy minimum. The nine-step atomic plan ends with pool initialization, position mint, custody reconciliation and the optional minimum-protected creator buy; every failure reverts the transaction.
 
 The local launch integration test uses real Uniswap v4 PoolManager, PositionManager and Permit2 test deployments with a local deterministic UERC20 factory. The separate pinned Ethereum fork uses the selected production PoolManager, PositionManager, UERC20Factory and WETH runtimes and launches through them at block 25,690,000.
 
-The tests prove the predicted token, mined hook and bound router configuration. They also prove fixed supply, canonical PoolId, launch hash, permanent position-NFT ownership, empty launcher and PositionManager token custody, an initial buy and mandatory fee accrual. The fork test repeats the actual token creation, pool initialization, position mint and permanent custody lifecycle using the pinned Ethereum contracts. It does not prove current production state or every failed-launch case.
+The tests prove the predicted token, mined hook and bound router configuration. They also prove fixed supply, canonical PoolId, launch hash, permanent position-NFT ownership and fee collection, empty launcher and PositionManager token custody, zero and minimum-protected creator buys and mandatory fee accrual. Hostile token factories, invalid mined hooks, modified init code, repeated salts, token collisions and creator-buy slippage all revert. A common assertion proves no token, hook, router, locker, pool slot, position increment or launch record survives each failed launch. The fork test repeats the actual token creation, pool initialization, position mint and permanent custody lifecycle using the pinned Ethereum contracts.
 
 ## Dependency records
 
@@ -122,9 +127,11 @@ The npm v3 lock, SHA-256 `72ee6848008260d91430b8aae49851f2602b1fb407fd1bf04fcf9c
 
 `submissions/bankroll-hook/dependency-evidence.json` records the exact block header, official references, explorer compiler records, bytecode lengths and runtime hashes for the selected Ethereum PoolManager, PositionManager, UERC20Factory, WETH and Chainlink VRF v2.5 wrapper. At block 25,690,000 the test verifies all five runtime hashes, the PositionManager-to-PoolManager binding, VRF wrapper version and callable quote interface, and a real WETH deposit.
 
-The same fork then deploys the reviewed local adapter, factories and launcher and completes UERC20 prediction and creation, CREATE2 hook mining, reviewed hook/router hash enforcement, v4 pool initialization, position minting and permanent position-NFT custody against the selected Ethereum dependencies. The two fork tests pass. The wrapper returns a zero native request quote in that historical state, so the evidence records the successful typed call without claiming current request availability; production launch must re-check the quote and wrapper funding.
+The same fork then deploys the reviewed local adapter, factories and launcher and completes UERC20 prediction and creation, CREATE2 hook mining, reviewed hook/router hash enforcement, v4 pool initialization, position minting and permanent position-NFT custody against the selected Ethereum dependencies. The two fork tests were rerun against an archive endpoint and pass. The wrapper returns a zero native request quote in that historical state, so that fork records only the successful typed call.
 
-PoolManager and PositionManager retain `official-feed-ref-unresolved` source status because the current official registry entries do not bind immutable source commits. Their exact runtime identities and verified explorer compiler records are still pinned here; this submission does not misstate those records as reproducible source matches. UERC20Factory is pinned to release commit `de5bacd215f6aae50e524297c18fcf78b69b6312`; Chainlink package source is pinned to `contracts-v1.5.0` commit `86aa5a1d34b20eda8d18fe6eb0e4882948e545ba`.
+At Ethereum block 25,697,510, a separate current-head smoke re-read all five runtimes and reproduced every pinned length and hash. PositionManager still returned the selected PoolManager and the wrapper still returned `VRFV2PlusWrapper 1.0.0`. At 179,724,274 wei gas price, its 200,000-gas, one-word native quote was 67,081,801,959,395 wei and its native balance was 23,735,849,938,180,266,047 wei. These are point-in-time operational observations, not funding sufficiency, future availability or monitoring guarantees.
+
+PoolManager and PositionManager retain `official-feed-ref-unresolved` source status after rechecking the Builder 1.5 official records: those records still have null release commits and mutable source URLs. Their exact runtime identities and verified explorer compiler records are pinned here; this submission does not misstate them as reproducible source matches. UERC20Factory is pinned to release commit `de5bacd215f6aae50e524297c18fcf78b69b6312`; Chainlink package source is pinned to `contracts-v1.5.0` commit `86aa5a1d34b20eda8d18fe6eb0e4882948e545ba`.
 
 ## Remaining gates
 
