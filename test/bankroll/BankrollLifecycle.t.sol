@@ -20,9 +20,25 @@ import { BankrollRouter, IWETH } from "../../src/bankroll/BankrollRouter.sol";
 import { IRandomnessAdapter } from "../../src/bankroll/interfaces/IRandomnessAdapter.sol";
 import { IBankrollHook } from "../../src/bankroll/interfaces/IBankrollHook.sol";
 import { BankrollHookData } from "../../src/bankroll/libraries/BankrollHookData.sol";
+import { BytecodeHash } from "../../src/bankroll/libraries/BytecodeHash.sol";
 import { BankrollConfig, GameState, Ticket, TicketStatus } from "../../src/bankroll/types/BankrollTypes.sol";
 import { MockToken, MockWeth } from "./helpers/MockAssets.sol";
 import { MockRandomnessAdapter } from "./helpers/MockRandomnessAdapter.sol";
+
+contract RuntimeHashHarness {
+    function checkHookRuntime(address target, uint256 expectedLength, bytes32 expectedHash)
+        external
+        view
+        returns (bytes32)
+    {
+        return BytecodeHash.assertHookRuntimeCode(target, expectedLength, expectedHash);
+    }
+
+    function normalisedHash(address target) external view returns (bytes32) {
+        bytes memory normalisedCode = BytecodeHash.normalisedHookRuntimeCode(target);
+        return keccak256(normalisedCode);
+    }
+}
 
 contract BankrollLifecycleTest is Deployers {
     BankrollHook internal hook;
@@ -73,8 +89,16 @@ contract BankrollLifecycleTest is Deployers {
         address predictedRouter = routerFactory.predict(
             routerSalt, manager, IBankrollHook(predicted), IERC20(address(token)), IWETH(address(weth))
         );
-        (hook, bankrollRouter) =
-            hookFactory.deploy(salt, initCode, manager, IERC20(address(token)), IWETH(address(weth)));
+        (hook, bankrollRouter) = hookFactory.deploy(
+            salt,
+            initCode,
+            manager,
+            address(this),
+            IERC20(address(token)),
+            IWETH(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
         assertEq(address(hook), predicted);
         assertEq(address(bankrollRouter), predictedRouter);
 
@@ -109,6 +133,142 @@ contract BankrollLifecycleTest is Deployers {
         assertTrue(permissions.afterSwapReturnDelta);
         assertEq(uint160(address(hook)) & hookFactory.ALL_HOOK_MASK(), 0x30CC);
         assertEq(hook.canonicalPoolId(), PoolId.unwrap(hookKey.toId()));
+    }
+
+    function testFactoryRejectsModifiedHookInitCode() public {
+        bytes memory constructorArgs = abi.encode(
+            manager,
+            address(this),
+            address(token),
+            IERC20(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        bytes memory modifiedConstructorArgs = abi.encode(
+            manager,
+            address(this),
+            address(token),
+            IERC20(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        modifiedConstructorArgs[modifiedConstructorArgs.length - 1] =
+            bytes1(uint8(modifiedConstructorArgs[modifiedConstructorArgs.length - 1]) ^ 1);
+        bytes memory modifiedInitCode = abi.encodePacked(type(BankrollHook).creationCode, modifiedConstructorArgs);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollHookFactory.InvalidHookConstructorArgs.selector,
+                keccak256(modifiedConstructorArgs),
+                keccak256(constructorArgs)
+            )
+        );
+        hookFactory.deploy(
+            keccak256("modified init code"),
+            modifiedInitCode,
+            manager,
+            address(this),
+            IERC20(address(token)),
+            IWETH(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+    }
+
+    function testFactoryRejectsModifiedHookCreationCode() public {
+        bytes memory constructorArgs = abi.encode(
+            manager,
+            address(this),
+            address(token),
+            IERC20(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        bytes memory modifiedCreationCode = type(BankrollHook).creationCode;
+        modifiedCreationCode[0] = bytes1(uint8(modifiedCreationCode[0]) ^ 1);
+        bytes memory modifiedInitCode = abi.encodePacked(modifiedCreationCode, constructorArgs);
+        bytes32 actualCreationCodeHash = keccak256(modifiedCreationCode);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollHookFactory.InvalidHookCreationCodeHash.selector,
+                actualCreationCodeHash,
+                hookFactory.approvedHookCreationCodeHash()
+            )
+        );
+        hookFactory.deploy(
+            keccak256("modified creation code"),
+            modifiedInitCode,
+            manager,
+            address(this),
+            IERC20(address(token)),
+            IWETH(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+    }
+
+    function testFactoryRejectsTruncatedHookInitCode() public {
+        bytes memory constructorArgs = abi.encode(
+            manager,
+            address(this),
+            address(token),
+            IERC20(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollHookFactory.InvalidHookConstructorArgs.selector, bytes32(0), keccak256(constructorArgs)
+            )
+        );
+        hookFactory.deploy(
+            keccak256("truncated init code"),
+            hex"",
+            manager,
+            address(this),
+            IERC20(address(token)),
+            IWETH(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+    }
+
+    function testRuntimeHashRejectsModifiedRuntimeBytes() public {
+        bytes memory modifiedRuntime = address(hook).code;
+        modifiedRuntime[0] = bytes1(uint8(modifiedRuntime[0]) ^ 1);
+        address foreignRuntime = makeAddr("foreign runtime");
+        vm.etch(foreignRuntime, modifiedRuntime);
+
+        RuntimeHashHarness harness = new RuntimeHashHarness();
+        uint256 expectedLength = hookFactory.APPROVED_HOOK_RUNTIME_CODE_LENGTH();
+        bytes32 expectedHash = hookFactory.approvedHookRuntimeCodeHash();
+        bytes32 actualHash = harness.normalisedHash(foreignRuntime);
+        assertNotEq(actualHash, expectedHash);
+        vm.expectRevert(abi.encodeWithSelector(BytecodeHash.RuntimeCodeHashMismatch.selector, actualHash, expectedHash));
+        harness.checkHookRuntime(foreignRuntime, expectedLength, expectedHash);
+    }
+
+    function testFactoryPublishesApprovedCodeProvenance() public {
+        RuntimeHashHarness harness = new RuntimeHashHarness();
+        assertEq(harness.normalisedHash(address(hook)), hookFactory.approvedHookRuntimeCodeHash());
+        assertEq(hookFactory.approvedHookCreationCodeHash(), keccak256(type(BankrollHook).creationCode));
+        assertEq(hookFactory.approvedHookRuntimeCodeHash(), hookFactory.APPROVED_HOOK_RUNTIME_CODE_HASH());
+        assertEq(routerFactory.approvedRouterCreationCodeHash(), keccak256(type(BankrollRouter).creationCode));
+        assertEq(routerFactory.approvedRouterRuntimeCodeHash(), routerFactory.APPROVED_ROUTER_RUNTIME_CODE_HASH());
+
+        (bytes32 hookCreation, bytes32 hookRuntime, bytes32 hookApprovedCreation, bytes32 hookApprovedRuntime) =
+            hookFactory.hookProvenance(address(hook));
+        assertEq(hookCreation, hookApprovedCreation);
+        assertEq(hookRuntime, bytes32(uint256(keccak256(address(hook).code))));
+        assertEq(hookApprovedRuntime, hookFactory.approvedHookRuntimeCodeHash());
+
+        (bytes32 routerCreation, bytes32 routerRuntime, bytes32 routerApprovedCreation, bytes32 routerApprovedRuntime) =
+            routerFactory.routerProvenance(address(bankrollRouter));
+        assertEq(routerCreation, routerApprovedCreation);
+        assertEq(routerRuntime, bytes32(uint256(keccak256(address(bankrollRouter).code))));
+        assertEq(routerApprovedRuntime, routerFactory.approvedRouterRuntimeCodeHash());
     }
 
     function testBuyWagerCompletesFiniteLifecycle() public {
@@ -165,6 +325,7 @@ contract BankrollLifecycleTest is Deployers {
     function testProgrammableOwnerCanClaimToChosenRecipient() public {
         _ordinarySwap(true, -int256(1 ether), 1 ether);
         uint256 liability = hook.programmableLiability();
+        assertEq(manager.balanceOf(address(hook), 0), liability);
         address recipient = makeAddr("programmable fee recipient");
 
         vm.prank(makeAddr("not owner"));
@@ -177,6 +338,7 @@ contract BankrollLifecycleTest is Deployers {
         assertEq(recipient.balance, beforeBalance + liability);
         assertEq(hook.programmableLiability(), 0);
         assertEq(hook.totalProgrammableFeesAccrued(), 0);
+        assertEq(manager.balanceOf(address(hook), 0), 0);
     }
 
     function testOrdinarySwapsCoverAllFourNativeQuoteQuadrants() public {
@@ -284,6 +446,27 @@ contract BankrollLifecycleTest is Deployers {
         vm.roll(uint256(hook.requestBlock()) + hook.fulfillmentTimeoutBlocks());
         vm.expectRevert(BankrollHook.RandomnessAlreadyFinal.selector);
         hook.expireRandomness();
+    }
+
+    function testRandomnessAdapterCannotReenterExpiry() public {
+        bankrollRouter.gameSwapExactInput{ value: 1.1 ether }(
+            true, 1 ether, 0, 0.1 ether, MIN_PRICE_LIMIT, block.timestamp, address(this)
+        );
+        vm.roll(hook.closeBlockExclusive());
+        hook.closeGame();
+        vm.roll(uint256(hook.closedAtBlock()) + hook.requestGraceBlocks());
+
+        randomness.configureExpiryReentrancy(address(hook), true, false);
+        hook.requestRandomness{ value: 0.01 ether }(0.01 ether);
+        assertFalse(randomness.lastReentrySucceeded());
+        assertEq(uint256(hook.state()), uint256(GameState.RandomnessRequested));
+
+        randomness.fulfill(hook.requestKey(), bytes32(uint256(7)));
+        vm.roll(uint256(hook.requestBlock()) + hook.fulfillmentTimeoutBlocks());
+        randomness.configureExpiryReentrancy(address(hook), false, true);
+        hook.pullRandomness();
+        assertFalse(randomness.lastReentrySucceeded());
+        assertEq(uint256(hook.state()), uint256(GameState.Seeded));
     }
 
     function testTicketCannotClaimTwice() public {

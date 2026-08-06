@@ -15,6 +15,7 @@ const sources = [
   "src/bankroll/interfaces/IRandomnessAdapter.sol",
   "src/bankroll/libraries/BankrollHookData.sol",
   "src/bankroll/libraries/BankrollMath.sol",
+  "src/bankroll/libraries/BytecodeHash.sol",
   "src/bankroll/libraries/ProgrammableFeeMath.sol",
   "src/bankroll/randomness/ChainlinkVrfV25Adapter.sol",
   "src/bankroll/types/BankrollTypes.sol",
@@ -22,9 +23,11 @@ const sources = [
 const tests = [
   "test/bankroll/BankrollLaunchV1.t.sol",
   "test/bankroll/BankrollLifecycle.t.sol",
+  "test/bankroll/invariant/BankrollSolvency.invariant.t.sol",
   "test/bankroll/unit/BankrollMath.t.sol",
   "test/bankroll/unit/HookData.t.sol",
   "test/bankroll/unit/ProgrammableFeeMath.t.sol",
+  "test/fork/BankrollEthereum.fork.t.sol",
 ];
 const modes = [
   "zeroForOne-exactInput",
@@ -43,15 +46,15 @@ submission.model = {
   whyV4: "One canonical hook can authenticate successful pool execution, charge executed gross native quote volume and create a ticket from the same atomic swap result.",
 };
 submission.builder = {
-  github: "speedruntradev",
-  contact: "https://github.com/speedruntradev",
+  github: "voladelta",
+  contact: "https://github.com/voladelta",
   beneficiary: null,
   licenseDeclaration: "MIT for first-party source, tests and documents; pinned dependencies retain their own licences.",
 };
 submission.publicMetadata.project = {
   name: "Bankroll Hook",
   description: "Optional fixed-odds WETH wagers backed by a separately funded bankroll on one canonical Uniswap v4 launch pool.",
-  projectUri: null,
+  projectUri: "https://github.com/voladelta/bankroll-hook",
   logoUri: null,
   logoContentHash: null,
   metadataMutable: false,
@@ -223,10 +226,10 @@ hook.callbackPolicies = [
 hook.hookData = {
   used: true,
   schema: "abi.encode(uint8 version=1, bytes32 pendingId), exact length 64",
-  identitySource: "trusted-router-decoded-user",
+  identitySource: "none",
   trustedRouterDeploymentRecordId: null,
   callbackSenderRule: "pool-manager-callback-and-exact-router-binding",
-  validation: "Check sender, exact-input mode, version, length, pending id, same block, Active state and deadline.",
+  validation: "Hook data carries no user identity. Check the immutable router sender, exact-input mode, version, length, previously staged pending id, same block, Active state and deadline.",
 };
 const feePart = (basis, formula) => ({ currency: "currency0", basis, formula, rounding: "down", maximumHundredthsOfBip: 1000 });
 hook.feeMechanism = {
@@ -428,7 +431,7 @@ submission.integration.dataReconstruction = {
   reconciliation: "Compare indexed aggregates with confirmed hook getters and PoolManager native claim balance.",
   reserveReconstruction: { used: true, balanceSources: ["Hook WETH balance", "Hook native PoolManager claim balance"], liabilitySources: ["Hook bankroll, open stake, player claim and programmable liability getters"], attributionKeys: ["chainId", "poolId", "currency", "beneficiary"], solvencyEquation: "WETH balance covers WETH ledgers and native claims cover the fee liability.", poolLiquidityTreatment: "excluded-from-hook-reserves", donationAndDustPolicy: "Direct donations create no shares or liabilities.", reconciliation: "Withhold data and alert on any confirmed mismatch." },
   sourcePaths: ["src/bankroll/BankrollHook.sol"],
-  testPaths: ["test/bankroll/BankrollLifecycle.t.sol"],
+  testPaths: ["test/bankroll/BankrollLifecycle.t.sol", "test/bankroll/invariant/BankrollSolvency.invariant.t.sol"],
 };
 submission.integration.platformHandoff = {
   intended: true,
@@ -441,7 +444,7 @@ submission.integration.platformHandoff = {
   maintainerReviewRequired: true,
   selfApproval: false,
   availabilityClaimed: false,
-  handoffNotes: "The contracts and launch flow are a local prototype. UI, API, indexer, routing, monitoring and deployment remain incomplete.",
+  handoffNotes: "The repository includes an offchain React review demo, but this proposal does not claim it as a reviewed or routed product client. It does not include a production API, indexer, routing registration, monitoring or deployment. Maintainers must review the client and exact deployment bindings before any product integration.",
 };
 
 submission.implementation = {
@@ -463,7 +466,7 @@ submission.risk = {
     externalDependencies: "PoolManager, PositionManager, UERC20 factory, WETH and Chainlink VRF are immutable runtime dependencies.",
     externalLiquidity: "The hook holds a separately funded bankroll and player liabilities.",
     valueAtRisk: "Bankroll, stakes, payouts and fee claims remain in the hook until exit.",
-    teamMaturity: "No independent review, public commit or deployment evidence exists yet.",
+    teamMaturity: "No independent review or production deployment evidence exists yet; local and pinned-fork evidence remains builder-declared and untrusted.",
     upgradeability: "There is no upgrade or mutable admin path.",
     autonomy: "Permissionless callers progress deadlines, randomness and bounded settlement.",
     priceImpact: "The hook charges 10 bps but does not change the LP curve or fee.",
@@ -476,8 +479,8 @@ submission.operations.monitoring = "Reconcile confirmed WETH balances, native cl
 submission.operations.incidentResponse = "There is no pause or upgrade. Publish the affected chain, hook, PoolId and block, stop product routing, preserve player exits and require a new reviewed hook for code changes.";
 submission.disclosures = [
   "Local prototype only: not audited, accepted, deployed, verified, routed, monitored or available.",
-  "The launch flow has local integration evidence only. Its exact Ethereum deployment dependencies remain unverified.",
-  "The current official Ethereum launchpad profile is reference-conflicted and runtime-unverified.",
+  "The launch flow has local and pinned historical Ethereum-fork evidence; this is not production deployment or monitoring evidence.",
+  "Selected Ethereum dependency runtimes are pinned in submissions/bankroll-hook/dependency-evidence.json; the official PoolManager and PositionManager source refs remain non-immutable in the current registry.",
   "A wager has equal win and loss probability, pays 1.96x gross on a win and has a 2% expected house edge.",
   "The project fee is zero; the mandatory 10 bps fee belongs only to the immutable Programmable owner.",
 ];

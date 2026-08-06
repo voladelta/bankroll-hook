@@ -25,6 +25,7 @@ import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
+import { IBankrollHook } from "./interfaces/IBankrollHook.sol";
 import { IRandomnessAdapter } from "./interfaces/IRandomnessAdapter.sol";
 import { BankrollHookData } from "./libraries/BankrollHookData.sol";
 import { BankrollMath } from "./libraries/BankrollMath.sol";
@@ -33,7 +34,7 @@ import { BankrollConfig, GameState, PendingWager, Ticket, TicketStatus } from ".
 
 /// @notice One finite, fixed-odds bankroll season for one native ETH/token Uniswap v4 pool.
 /// @dev Prototype only. This contract is not independently reviewed, deployed, routed or available.
-contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
+contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient, IBankrollHook {
     using CurrencySettler for Currency;
     using SafeCast for *;
     using SafeERC20 for IERC20;
@@ -249,7 +250,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
         );
     }
 
-    function pendingWagerExists(bytes32 pendingId) external view returns (bool) {
+    function pendingWagerExists(bytes32 pendingId) external view override returns (bool) {
         return _pendingWagers[pendingId].exists;
     }
 
@@ -331,7 +332,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
         emit GameCancelledUnfunded(bankrollAssets, minimumBankrollAssets);
     }
 
-    function stageWager(bytes32 pendingId, address player, uint128 stake) external nonReentrant {
+    function stageWager(bytes32 pendingId, address player, uint128 stake) external override nonReentrant {
         if (msg.sender != gameRouter) revert UnauthorizedRouter(msg.sender);
         if (player == address(0)) revert ZeroAddress();
         if (state != GameState.Active || block.number >= closeBlockExclusive) revert GameEntryClosed();
@@ -383,7 +384,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
         emit RandomnessRequested(requestKey, requestBlock, fee);
     }
 
-    function pullRandomness() external {
+    function pullRandomness() external nonReentrant {
         if (state != GameState.RandomnessRequested) revert InvalidState(state);
         if (!randomnessAdapter.fulfilled(requestKey)) revert RandomnessNotFulfilled();
         bytes32 word = randomnessAdapter.consumeRandomness(requestKey);
@@ -402,7 +403,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
         emit RandomnessConsumed(requestKey, seasonSeed);
     }
 
-    function expireRandomness() external {
+    function expireRandomness() external nonReentrant {
         if (state == GameState.Closed) {
             if (block.number < uint256(closedAtBlock) + requestGraceBlocks) revert RandomnessDeadlineNotReached();
         } else if (state == GameState.RandomnessRequested) {
@@ -575,7 +576,7 @@ contract BankrollHook is BaseHook, IUnlockCallback, ReentrancyGuardTransient {
         bool exactInput = params.amountSpecified < 0;
         bool quoteIsSpecified = params.zeroForOne == exactInput;
         uint256 grossQuote;
-        uint256 fee;
+        uint256 fee = 0;
 
         if (quoteIsSpecified) {
             uint256 pendingPlusOne = _pendingSpecifiedQuotePoolAmountPlusOne;

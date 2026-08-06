@@ -17,6 +17,12 @@ import { BankrollConfig, GameState } from "../../src/bankroll/types/BankrollType
 import { MockFixedToken, MockUERC20Factory } from "./helpers/MockAssets.sol";
 import { MockRandomnessAdapter } from "./helpers/MockRandomnessAdapter.sol";
 
+contract MismatchedHookFactory {
+    function approvedHookCreationCodeHash() external pure returns (bytes32) {
+        return bytes32(0);
+    }
+}
+
 contract BankrollLaunchV1Test is PosmTestSetup {
     BankrollLaunchV1 internal launcher;
     BankrollHookFactory internal hookFactory;
@@ -93,10 +99,119 @@ contract BankrollLaunchV1Test is PosmTestSetup {
         assertEq(result.hook.registrar(), address(launcher));
         assertEq(result.hook.launchedToken(), result.token);
         assertEq(result.hook.canonicalPoolId(), result.poolId);
+        assertEq(result.hookCreationCodeHash, launcher.approvedHookCreationCodeHash());
+        assertEq(result.hookRuntimeCodeHash, bytes32(uint256(keccak256(address(result.hook).code))));
+        assertEq(result.routerCreationCodeHash, launcher.approvedRouterCreationCodeHash());
+        assertEq(result.routerRuntimeCodeHash, bytes32(uint256(keccak256(address(result.router).code))));
         assertEq(launcher.launchHashOf(result.token), result.launchHash);
         assertGt(result.tokenLiquidityAmount, 0);
         assertGt(result.initialBuyTokenAmount, 0);
         assertGt(IERC20(result.token).balanceOf(address(this)), 0);
         assertGt(result.hook.programmableLiability(), 0);
+    }
+
+    function testLauncherRejectsFactoryWithUnreviewedHashes() public {
+        MismatchedHookFactory mismatchedFactory = new MismatchedHookFactory();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollLaunchV1.InvalidLaunchBytecodeHash.selector,
+                bytes32(0),
+                launcher.REVIEWED_HOOK_CREATION_CODE_HASH()
+            )
+        );
+        new BankrollLaunchV1(
+            manager,
+            lpm,
+            IUERC20Factory(address(tokenFactory)),
+            BankrollHookFactory(address(mismatchedFactory)),
+            IWETH(address(_WETH9)),
+            IRandomnessAdapter(address(randomness))
+        );
+    }
+
+    function testLauncherRejectsModifiedHookInitCode() public {
+        string memory name = "Bankroll Launch Token";
+        string memory symbol = "BANK";
+        bytes32 creatorSalt = keccak256("creator salt mismatch");
+        (address predictedToken,) = launcher.predictTokenAddress(name, symbol, address(this), creatorSalt);
+        bytes memory constructorArgs = abi.encode(
+            manager,
+            address(launcher),
+            predictedToken,
+            IERC20(address(_WETH9)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        bytes memory modifiedConstructorArgs = abi.encode(
+            manager,
+            address(launcher),
+            predictedToken,
+            IERC20(address(_WETH9)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        modifiedConstructorArgs[modifiedConstructorArgs.length - 1] =
+            bytes1(uint8(modifiedConstructorArgs[modifiedConstructorArgs.length - 1]) ^ 1);
+        bytes memory modifiedInitCode = abi.encodePacked(type(BankrollHook).creationCode, modifiedConstructorArgs);
+        (, bytes32 hookSalt) = HookMiner.find(
+            address(hookFactory), hookFactory.REQUIRED_HOOK_FLAGS(), type(BankrollHook).creationCode, constructorArgs
+        );
+        BankrollLaunchV1.LaunchParameters memory parameters = BankrollLaunchV1.LaunchParameters({
+            name: name,
+            symbol: symbol,
+            creatorSalt: creatorSalt,
+            hookSalt: hookSalt,
+            hookInitCode: modifiedInitCode,
+            metadata: UERC20Metadata({ description: "A fixed test token", website: "", image: "", extraData: "" }),
+            game: config
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollHookFactory.InvalidHookConstructorArgs.selector,
+                keccak256(modifiedConstructorArgs),
+                keccak256(constructorArgs)
+            )
+        );
+        launcher.launch(parameters);
+    }
+
+    function testLauncherRejectsModifiedHookCreationCode() public {
+        string memory name = "Bankroll Launch Token";
+        string memory symbol = "BANK";
+        bytes32 creatorSalt = keccak256("creator salt creation mismatch");
+        (address predictedToken,) = launcher.predictTokenAddress(name, symbol, address(this), creatorSalt);
+        bytes memory constructorArgs = abi.encode(
+            manager,
+            address(launcher),
+            predictedToken,
+            IERC20(address(_WETH9)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
+        bytes memory modifiedCreationCode = type(BankrollHook).creationCode;
+        modifiedCreationCode[0] = bytes1(uint8(modifiedCreationCode[0]) ^ 1);
+        bytes memory modifiedInitCode = abi.encodePacked(modifiedCreationCode, constructorArgs);
+        (, bytes32 hookSalt) = HookMiner.find(
+            address(hookFactory), hookFactory.REQUIRED_HOOK_FLAGS(), type(BankrollHook).creationCode, constructorArgs
+        );
+        BankrollLaunchV1.LaunchParameters memory parameters = BankrollLaunchV1.LaunchParameters({
+            name: name,
+            symbol: symbol,
+            creatorSalt: creatorSalt,
+            hookSalt: hookSalt,
+            hookInitCode: modifiedInitCode,
+            metadata: UERC20Metadata({ description: "A fixed test token", website: "", image: "", extraData: "" }),
+            game: config
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BankrollHookFactory.InvalidHookCreationCodeHash.selector,
+                keccak256(modifiedCreationCode),
+                hookFactory.approvedHookCreationCodeHash()
+            )
+        );
+        launcher.launch(parameters);
     }
 }

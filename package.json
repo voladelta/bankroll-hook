@@ -7,7 +7,8 @@
   "scripts": {
     "build": "forge build && node script/check-first-party-sizes.mjs",
     "size": "node script/check-first-party-sizes.mjs",
-    "test": "forge test -vvv",
+    "test": "forge test -vvv --no-match-path 'test/fork/**'",
+    "test:fork": "forge test --match-path 'test/fork/**' -vvv",
     "test:gas": "forge test --gas-report",
     "fmt": "forge fmt --check",
     "lint": "forge lint",

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "attestation": "builder-declared-untrusted",
+  "chainId": 1,
+  "network": "ethereum-mainnet",
+  "observedBlock": 25690000,
+  "observedBlockHash": "0x301154cfcdb837aaeea3d00be05f2eb0a9272e8ee137ff1c046bba1600933bd2",
+  "observedParentBlockHash": "0xac456a672fed18164f423bb4efee5519ec87f1dc34ff37a6fe2cf9b4bcda79be",
+  "observedStateRoot": "0xfd0ca5762e87da027ad6c39d0a257e8bfc310349040bebc4ee1f5524cf2b4203",
+  "rpcClass": "public-archive-rpc",
+  "verificationProvider": "Blockscout verified-source API plus pinned Foundry fork runtime checks",
+  "officialReferences": [
+    "https://developers.uniswap.org/deployments",
+    "https://developers.uniswap.org/docs/liquidity/liquidity-launchpad/deployments",
+    "https://docs.chain.link/vrf/v2-5/supported-networks"
+  ],
+  "forkTest": {
+    "path": "test/fork/BankrollEthereum.fork.t.sol",
+    "command": "MAINNET_RPC_URL=<archive-rpc> npm run test:fork",
+    "result": "2 passed; 0 failed; 0 skipped",
+    "coverage": [
+      "exact dependency runtime lengths and hashes",
+      "PositionManager to PoolManager binding",
+      "VRF wrapper type and native-price interface",
+      "WETH deposit and balance delta",
+      "full UERC20 creation, v4 pool initialization, reviewed hook/router deployment and permanently locked position lifecycle"
+    ]
+  },
+  "dependencies": [
+    {
+      "id": "v4-poolmanager-ethereum",
+      "name": "Uniswap v4 PoolManager",
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeLength": 24009,
+      "runtimeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      "sourceRepository": "https://github.com/Uniswap/v4-core",
+      "officialSourceRef": "v4-core@1.0.0",
+      "sourceResolutionStatus": "official-feed-ref-unresolved",
+      "verifiedSourceProvider": "https://eth.blockscout.com/address/0x000000000004444c5dc75cB358380D2e3dE08A90?tab=contract",
+      "compiler": "solc 0.8.26+commit.8a97fa7a; optimizer 44444444 runs; viaIR; Cancun",
+      "interfaceAssertions": ["runtime identity", "used successfully by the full launch lifecycle"]
+    },
+    {
+      "id": "v4-positionmanager-ethereum",
+      "name": "Uniswap v4 PositionManager",
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeLength": 23877,
+      "runtimeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b",
+      "sourceRepository": "https://github.com/Uniswap/v4-periphery",
+      "officialSourceRef": "2656054",
+      "sourceResolutionStatus": "official-feed-ref-unresolved",
+      "verifiedSourceProvider": "https://eth.blockscout.com/address/0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e?tab=contract",
+      "compiler": "solc 0.8.26+commit.8a97fa7a; optimizer 30000 runs; viaIR; Cancun",
+      "interfaceAssertions": [
+        "poolManager() returns 0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "mint and permanent position-NFT custody succeed in the full launch lifecycle"
+      ]
+    },
+    {
+      "id": "liquidity-launchpad-uerc20factory-ethereum",
+      "name": "Uniswap UERC20Factory",
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeLength": 13380,
+      "runtimeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
+      "sourceRepository": "https://github.com/Uniswap/uerc20-factory",
+      "sourceRevision": "de5bacd215f6aae50e524297c18fcf78b69b6312",
+      "sourceResolutionStatus": "release-commit-pinned-and-explorer-verified",
+      "verifiedSourceProvider": "https://eth.blockscout.com/address/0x000000e200088D55C39a11F609E5F667729ad49b?tab=contract",
+      "compiler": "solc 0.8.28+commit.7893614a; optimizer 50000000 runs; viaIR; Prague",
+      "interfaceAssertions": ["getUERC20Address prediction", "createToken fixed-supply creation in the full launch lifecycle"]
+    },
+    {
+      "id": "weth9-ethereum",
+      "name": "Wrapped Ether",
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "runtimeLength": 3124,
+      "runtimeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+      "sourceRepository": "https://github.com/gnosis/canonical-weth",
+      "sourceResolutionStatus": "explorer-verified",
+      "verifiedSourceProvider": "https://eth.blockscout.com/address/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2?tab=contract",
+      "compiler": "solc 0.4.19+commit.c4cbbb05; optimizer disabled",
+      "interfaceAssertions": ["deposit increases the caller balance by the deposited amount"]
+    },
+    {
+      "id": "chainlink-vrf-v25-wrapper-ethereum",
+      "name": "Chainlink VRF v2.5 direct-funding wrapper",
+      "address": "0x02aae1A04f9828517b3007f83f6181900CaD910c",
+      "runtimeLength": 14693,
+      "runtimeHash": "0x79dd04a1a325740433d8ffbbc0a9217c5d88992d6f58c58daad0982d41f639bc",
+      "sourceRepository": "https://github.com/smartcontractkit/chainlink-evm",
+      "sourceRevision": "86aa5a1d34b20eda8d18fe6eb0e4882948e545ba",
+      "packageVersion": "1.5.0",
+      "sourceResolutionStatus": "package-tag-pinned-and-explorer-verified",
+      "verifiedSourceProvider": "https://eth.blockscout.com/address/0x02aae1A04f9828517b3007f83f6181900CaD910c?tab=contract",
+      "compiler": "solc 0.8.19+commit.7dd6d404; optimizer 1000000 runs; Paris",
+      "interfaceAssertions": [
+        "typeAndVersion() returns VRFV2PlusWrapper 1.0.0",
+        "calculateRequestPriceNative(uint32,uint32) is callable",
+        "reviewed adapter construction succeeds against the wrapper"
+      ]
+    }
+  ],
+  "limitations": [
+    "The PoolManager and PositionManager official registry source refs are not immutable Git commits; runtime identity and verified explorer source are recorded without claiming a reproducible source match.",
+    "A passing historical fork is compatibility evidence, not current deployment monitoring or a production availability claim.",
+    "The Chainlink wrapper quoted zero native request price at the pinned historical state; production launch configuration must re-check quote and wrapper funding at deployment time."
+  ]
+}

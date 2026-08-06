@@ -221,6 +221,19 @@ contract BankrollInvariantHandler is Deployers {
         _observeLifecycle();
     }
 
+    function claimProgrammableFee() external {
+        _observeLifecycle();
+        if (hook.programmableLiability() == 0) return _skip();
+
+        vm.prank(hook.PROGRAMMABLE_FEE_OWNER());
+        try hook.claimProgrammableFeesTo(address(this)) {
+            ++successfulCalls;
+        } catch {
+            ++revertedCalls;
+        }
+        _observeLifecycle();
+    }
+
     function finalize() external {
         _observeLifecycle();
         GameState current = hook.state();
@@ -309,8 +322,16 @@ contract BankrollSolvencyInvariantTest is Deployers {
         (, bytes32 salt) = HookMiner.find(
             address(hookFactory), hookFactory.REQUIRED_HOOK_FLAGS(), type(BankrollHook).creationCode, constructorArgs
         );
-        (hook, bankrollRouter) =
-            hookFactory.deploy(salt, initCode, manager, IERC20(address(token)), IWETH(address(weth)));
+        (hook, bankrollRouter) = hookFactory.deploy(
+            salt,
+            initCode,
+            manager,
+            address(this),
+            IERC20(address(token)),
+            IWETH(address(weth)),
+            IRandomnessAdapter(address(randomness)),
+            config
+        );
 
         PoolKey memory hookKey = PoolKey({
             currency0: Currency.wrap(address(0)),
@@ -330,7 +351,7 @@ contract BankrollSolvencyInvariantTest is Deployers {
         assertTrue(weth.transfer(address(handler), 100 ether));
         vm.deal(address(handler), 10_000 ether);
 
-        bytes4[] memory selectors = new bytes4[](13);
+        bytes4[] memory selectors = new bytes4[](14);
         selectors[0] = handler.fund.selector;
         selectors[1] = handler.withdrawFunding.selector;
         selectors[2] = handler.finishFunding.selector;
@@ -344,6 +365,7 @@ contract BankrollSolvencyInvariantTest is Deployers {
         selectors[10] = handler.claim.selector;
         selectors[11] = handler.finalize.selector;
         selectors[12] = handler.redeem.selector;
+        selectors[13] = handler.claimProgrammableFee.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
         targetContract(address(handler));
     }
@@ -369,5 +391,10 @@ contract BankrollSolvencyInvariantTest is Deployers {
 
     function invariant_bankrollSharesStayConserved() public view {
         assertEq(hook.bankrollShares(address(handler)), hook.totalBankrollShares());
+    }
+
+    function invariant_programmableFeeLiabilityHasNativeClaimBacking() public view {
+        assertEq(hook.programmableLiability(), hook.totalProgrammableFeesAccrued());
+        assertEq(manager.balanceOf(address(hook), 0), hook.programmableLiability());
     }
 }

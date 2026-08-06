@@ -21,7 +21,7 @@ import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import { LiquidityAmounts } from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
 import { BankrollHook } from "./BankrollHook.sol";
-import { BankrollHookFactory } from "./BankrollHookFactory.sol";
+import { BankrollHookFactory, BankrollRouterFactory } from "./BankrollHookFactory.sol";
 import { BankrollRouter, IWETH } from "./BankrollRouter.sol";
 import { PermanentPositionLocker } from "./PermanentPositionLocker.sol";
 import { IRandomnessAdapter } from "./interfaces/IRandomnessAdapter.sol";
@@ -55,7 +55,8 @@ interface IUERC20Factory {
 }
 
 /// @notice Creates one fixed-supply token, its bound hook and router, and one permanently locked v4 position.
-/// @dev This local source model does not assert that any published Ethereum dependency address is runtime-verified.
+/// @dev Dependency addresses are immutable constructor inputs; deployment tooling must bind them to reviewed runtime
+/// evidence.
 contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     using CurrencySettler for Currency;
     using PoolIdLibrary for PoolKey;
@@ -72,6 +73,14 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     int24 public constant INITIAL_TICK = 204_200;
     int24 public constant TICK_SPACING = 200;
     uint24 public constant LP_FEE_PIPS = 0;
+    bytes32 public constant REVIEWED_HOOK_CREATION_CODE_HASH =
+        0x03e975dccb4cd6680da9e1d6fd4551f81cd080c8d5c2e77f71a74423385ddfde;
+    bytes32 public constant REVIEWED_HOOK_RUNTIME_CODE_HASH =
+        0x3ca69ffc230c32e40962755fadb865822f0c7e1f8e49121fcd4c05b90ae013a0;
+    bytes32 public constant REVIEWED_ROUTER_CREATION_CODE_HASH =
+        0xe1ce945bbb95bd1dcf9ffc7da4c1585009416599fdb21340768d4020c8e9556d;
+    bytes32 public constant REVIEWED_ROUTER_RUNTIME_CODE_HASH =
+        0xef3209b3d091029d17ff449fd871ce3fa8f1dd3aae43f22b3cae1148879e89bf;
     Currency private constant NATIVE = Currency.wrap(address(0));
 
     IPoolManager public immutable poolManager;
@@ -80,6 +89,10 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     BankrollHookFactory public immutable hookFactory;
     IWETH public immutable weth;
     IRandomnessAdapter public immutable randomnessAdapter;
+    bytes32 public immutable approvedHookCreationCodeHash;
+    bytes32 public immutable approvedHookRuntimeCodeHash;
+    bytes32 public immutable approvedRouterCreationCodeHash;
+    bytes32 public immutable approvedRouterRuntimeCodeHash;
 
     mapping(address token => bytes32 launchHash) public launchHashOf;
 
@@ -104,6 +117,10 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 initialBuyNativeAmount;
         uint256 initialBuyTokenAmount;
         bytes32 poolId;
+        bytes32 hookCreationCodeHash;
+        bytes32 hookRuntimeCodeHash;
+        bytes32 routerCreationCodeHash;
+        bytes32 routerRuntimeCodeHash;
         bytes32 launchHash;
     }
 
@@ -118,6 +135,7 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InitialBuyBelowMinimum(uint256 actual, uint256 minimum);
     error InvalidDependency(address dependency);
     error InvalidHookConfiguration(bytes32 actual, bytes32 expected);
+    error InvalidLaunchBytecodeHash(bytes32 actual, bytes32 expected);
     error InvalidInitialBuyDelta(int128 nativeDelta, int128 tokenDelta);
     error InvalidInitialBuyResult(uint256 tokenAmount, uint256 nativeBalance);
     error InvalidInitialBuySettlement(uint256 actual, uint256 expected);
@@ -163,6 +181,20 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 tokenAmount,
         bytes32 launchHash
     );
+    event BankrollLaunchProvenance(
+        address indexed token,
+        address indexed hook,
+        address indexed router,
+        bytes32 hookCreationCodeHash,
+        bytes32 hookRuntimeCodeHash,
+        bytes32 routerCreationCodeHash,
+        bytes32 routerRuntimeCodeHash,
+        bytes32 approvedHookCreationCodeHash,
+        bytes32 approvedHookRuntimeCodeHash,
+        bytes32 approvedRouterCreationCodeHash,
+        bytes32 approvedRouterRuntimeCodeHash,
+        bytes32 launchHash
+    );
 
     constructor(
         IPoolManager poolManager_,
@@ -188,6 +220,15 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         hookFactory = hookFactory_;
         weth = weth_;
         randomnessAdapter = randomnessAdapter_;
+        approvedHookCreationCodeHash = hookFactory_.approvedHookCreationCodeHash();
+        _requireApprovedHash(approvedHookCreationCodeHash, REVIEWED_HOOK_CREATION_CODE_HASH);
+        approvedHookRuntimeCodeHash = hookFactory_.approvedHookRuntimeCodeHash();
+        _requireApprovedHash(approvedHookRuntimeCodeHash, REVIEWED_HOOK_RUNTIME_CODE_HASH);
+        BankrollRouterFactory routerFactory_ = hookFactory_.routerFactory();
+        approvedRouterCreationCodeHash = routerFactory_.approvedRouterCreationCodeHash();
+        _requireApprovedHash(approvedRouterCreationCodeHash, REVIEWED_ROUTER_CREATION_CODE_HASH);
+        approvedRouterRuntimeCodeHash = routerFactory_.approvedRouterRuntimeCodeHash();
+        _requireApprovedHash(approvedRouterRuntimeCodeHash, REVIEWED_ROUTER_RUNTIME_CODE_HASH);
     }
 
     function predictTokenAddress(string calldata name, string calldata symbol, address creator, bytes32 creatorSalt)
@@ -213,8 +254,42 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         );
         if (result.token.code.length != 0) revert TokenAlreadyExists(result.token);
 
-        (result.hook, result.router) =
-            hookFactory.deploy(parameters.hookSalt, parameters.hookInitCode, poolManager, IERC20(result.token), weth);
+        (result.hook, result.router) = hookFactory.deploy(
+            parameters.hookSalt,
+            parameters.hookInitCode,
+            poolManager,
+            address(this),
+            IERC20(result.token),
+            weth,
+            randomnessAdapter,
+            parameters.game
+        );
+        (
+            bytes32 hookCreationCodeHash,
+            bytes32 hookRuntimeCodeHash,
+            bytes32 hookApprovedCreationCodeHash,
+            bytes32 hookApprovedRuntimeCodeHash
+        ) = hookFactory.hookProvenance(address(result.hook));
+        (
+            bytes32 routerCreationCodeHash,
+            bytes32 routerRuntimeCodeHash,
+            bytes32 routerApprovedCreationCodeHash,
+            bytes32 routerApprovedRuntimeCodeHash
+        ) = BankrollRouterFactory(address(hookFactory.routerFactory())).routerProvenance(address(result.router));
+        result.hookCreationCodeHash = hookCreationCodeHash;
+        result.hookRuntimeCodeHash = hookRuntimeCodeHash;
+        result.routerCreationCodeHash = routerCreationCodeHash;
+        result.routerRuntimeCodeHash = routerRuntimeCodeHash;
+        if (
+            hookApprovedCreationCodeHash != approvedHookCreationCodeHash
+                || hookApprovedRuntimeCodeHash != approvedHookRuntimeCodeHash
+                || routerApprovedCreationCodeHash != approvedRouterCreationCodeHash
+                || routerApprovedRuntimeCodeHash != approvedRouterRuntimeCodeHash
+                || result.hookCreationCodeHash != approvedHookCreationCodeHash
+                || result.routerCreationCodeHash != approvedRouterCreationCodeHash
+        ) {
+            revert InvalidLaunchBytecodeHash(result.hookRuntimeCodeHash, approvedHookRuntimeCodeHash);
+        }
         bytes32 expectedConfiguration = _expectedHookConfiguration(result, parameters.game);
         bytes32 actualConfiguration = result.hook.configurationHash();
         if (actualConfiguration != expectedConfiguration) {
@@ -357,6 +432,10 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         );
     }
 
+    function _requireApprovedHash(bytes32 actual, bytes32 expected) private pure {
+        if (actual != expected) revert InvalidLaunchBytecodeHash(actual, expected);
+    }
+
     function _recordLaunch(LaunchParameters calldata parameters, LaunchResult memory result, address creator)
         private
         returns (bytes32 launchHash)
@@ -370,7 +449,15 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
                 address(result.positionLocker),
                 result.positionTokenId,
                 result.poolId,
-                result.hook.configurationHash()
+                result.hook.configurationHash(),
+                result.hookCreationCodeHash,
+                result.hookRuntimeCodeHash,
+                result.routerCreationCodeHash,
+                result.routerRuntimeCodeHash,
+                approvedHookCreationCodeHash,
+                approvedHookRuntimeCodeHash,
+                approvedRouterCreationCodeHash,
+                approvedRouterRuntimeCodeHash
             )
         );
         bytes32 economicsHash = keccak256(
@@ -388,6 +475,20 @@ contract BankrollLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         );
         launchHash = keccak256(abi.encode(block.chainid, address(this), infrastructureHash, economicsHash));
         launchHashOf[result.token] = launchHash;
+        emit BankrollLaunchProvenance(
+            result.token,
+            address(result.hook),
+            address(result.router),
+            result.hookCreationCodeHash,
+            result.hookRuntimeCodeHash,
+            result.routerCreationCodeHash,
+            result.routerRuntimeCodeHash,
+            approvedHookCreationCodeHash,
+            approvedHookRuntimeCodeHash,
+            approvedRouterCreationCodeHash,
+            approvedRouterRuntimeCodeHash,
+            launchHash
+        );
         emit BankrollTokenLaunched(
             creator,
             result.token,

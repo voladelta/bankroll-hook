@@ -1369,6 +1369,7 @@
       "src/bankroll/interfaces/IRandomnessAdapter.sol",
       "src/bankroll/libraries/BankrollHookData.sol",
       "src/bankroll/libraries/BankrollMath.sol",
+      "src/bankroll/libraries/BytecodeHash.sol",
       "src/bankroll/libraries/ProgrammableFeeMath.sol",
       "src/bankroll/randomness/ChainlinkVrfV25Adapter.sol",
       "src/bankroll/types/BankrollTypes.sol"
@@ -1379,7 +1380,8 @@
       "test/bankroll/invariant/BankrollSolvency.invariant.t.sol",
       "test/bankroll/unit/BankrollMath.t.sol",
       "test/bankroll/unit/HookData.t.sol",
-      "test/bankroll/unit/ProgrammableFeeMath.t.sol"
+      "test/bankroll/unit/ProgrammableFeeMath.t.sol",
+      "test/fork/BankrollEthereum.fork.t.sol"
     ],
     "compilerBuildInfoPaths": [],
     "specificationPath": "MECHANISM.md",
@@ -1407,7 +1409,7 @@
       "externalDependencies": "PoolManager, PositionManager, UERC20 factory, WETH and Chainlink VRF are immutable runtime dependencies.",
       "externalLiquidity": "The hook holds a separately funded bankroll and player liabilities.",
       "valueAtRisk": "Bankroll, stakes, payouts and fee claims remain in the hook until exit.",
-      "teamMaturity": "No independent review, public commit or deployment evidence exists yet.",
+      "teamMaturity": "No independent review or production deployment evidence exists yet; local and pinned-fork evidence remains builder-declared and untrusted.",
       "upgradeability": "There is no upgrade or mutable admin path.",
       "autonomy": "Permissionless callers progress deadlines, randomness and bounded settlement.",
       "priceImpact": "The hook charges 10 bps but does not change the LP curve or fee."
@@ -1427,8 +1429,8 @@
   },
   "disclosures": [
     "Local prototype only: not audited, accepted, deployed, verified, routed, monitored or available.",
-    "The launch flow has local integration evidence only. Its exact Ethereum deployment dependencies remain unverified.",
-    "The current official Ethereum launchpad profile is reference-conflicted and runtime-unverified.",
+    "The launch flow has local and pinned historical Ethereum-fork evidence; this is not production deployment or monitoring evidence.",
+    "Selected Ethereum dependency runtimes are pinned in submissions/bankroll-hook/dependency-evidence.json; the official PoolManager and PositionManager source refs remain non-immutable in the current registry.",
     "A wager has equal win and loss probability, pays 1.96x gross on a win and has a 2% expected house edge.",
     "The project fee is zero; the mandatory 10 bps fee belongs only to the immutable Programmable owner."
   ],
